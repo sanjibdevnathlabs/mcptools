@@ -18,7 +18,7 @@ from starlette.routing import Mount, Route
 
 mcp = FastMCP("weather")
 
-NWS_API_BASE = "https://api.weather.gov"
+OPENWEATHER_API_BASE = "https://api.openweathermap.org/data/2.5"
 USER_AGENT = "weather-app/1.0"
 
 # Configure logging
@@ -27,6 +27,11 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# Get API key from environment variable
+OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
+if not OPENWEATHER_API_KEY:
+    logger.warning("OPENWEATHER_API_KEY environment variable not set. Some features may not work.")
 
 # Global variables for shutdown handling
 shutdown_requested = False
@@ -52,17 +57,26 @@ def setup_aggressive_signal_handlers():
         signal.signal(signal.SIGBREAK, force_shutdown_handler)
 
 
-async def make_nws_request(url: str) -> Dict[str, Any] | None:
-    """Make a request to the National Weather Service API with proper error handling."""
+async def make_openweather_request(url: str, params: Dict[str, Any] = None) -> Dict[str, Any] | None:
+    """Make a request to the OpenWeatherMap API with proper error handling."""
+    if not OPENWEATHER_API_KEY:
+        logger.error("OpenWeatherMap API key not configured")
+        return None
+        
     headers = {
         "User-Agent": USER_AGENT,
-        "Accept": "application/geo+json"
+        "Accept": "application/json"
     }
+    
+    # Add API key to parameters
+    if params is None:
+        params = {}
+    params["appid"] = OPENWEATHER_API_KEY
 
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
-            logger.debug(f"Making request to: {url}")
-            response = await client.get(url, headers=headers)
+            logger.debug(f"Making request to: {url} with params: {params}")
+            response = await client.get(url, headers=headers, params=params)
             response.raise_for_status()
             return response.json()
     except httpx.TimeoutException:
@@ -79,115 +93,168 @@ async def make_nws_request(url: str) -> Dict[str, Any] | None:
         return None
 
 
-def format_alert(feature: dict) -> str:
-    props = feature.get("properties", {})
-
+def format_weather_condition(data: dict) -> str:
+    """Format current weather condition data from OpenWeatherMap API."""
+    main = data.get("main", {})
+    weather = data.get("weather", [{}])[0]
+    wind = data.get("wind", {})
+    
+    # Check for severe weather conditions
+    weather_main = weather.get("main", "").lower()
+    description = weather.get("description", "")
+    
+    severity_indicator = ""
+    if weather_main in ["thunderstorm", "tornado", "hurricane"]:
+        severity_indicator = "⚠️ SEVERE WEATHER ALERT"
+    elif weather_main in ["rain", "snow", "drizzle"]:
+        severity_indicator = "🌧️ Weather Advisory"
+    
     return f"""
-Event: {props.get('event', 'Unknown')}
-Area: {props.get('areaDesc', 'Unknown')}
-Severity: {props.get('severity', 'Unknown')}
-Description: {props.get('description', 'No description available')}
-Instructions: {props.get('instruction', 'No specific instructions provided')}
+{severity_indicator}
+Location: {data.get('name', 'Unknown')}
+Current Weather: {description.title()}
+Temperature: {main.get('temp', 'N/A')}°C (Feels like: {main.get('feels_like', 'N/A')}°C)
+Humidity: {main.get('humidity', 'N/A')}%
+Pressure: {main.get('pressure', 'N/A')} hPa
+Wind: {wind.get('speed', 'N/A')} m/s, {wind.get('deg', 'N/A')}°
+Visibility: {data.get('visibility', 'N/A')} meters
 """
 
 
 @mcp.tool()
-async def get_alerts(state: str) -> str:
-    """Get weather alerts for a US state.
+async def get_current_weather(city: str) -> str:
+    """Get current weather conditions for an Indian city.
 
     Args:
-        state: Two-letter US state code (e.g. CA, NY)
+        city: Name of an Indian city (e.g. Mumbai, Delhi, Bangalore)
     """
     try:
-        # Validate state code
-        if not state or len(state) != 2:
-            return "Error: Please provide a valid two-letter US state code (e.g., CA, NY)."
+        # Validate city name
+        if not city or len(city.strip()) < 2:
+            return "Error: Please provide a valid city name (e.g., Mumbai, Delhi, Bangalore)."
         
-        state = state.upper()
-        logger.info(f"Fetching alerts for state: {state}")
+        city = city.strip()
+        logger.info(f"Fetching current weather for city: {city}")
         
-        url = f"{NWS_API_BASE}/alerts/active/area/{state}"
-        data = await make_nws_request(url)
+        # Use OpenWeatherMap current weather API
+        url = f"{OPENWEATHER_API_BASE}/weather"
+        params = {
+            "q": f"{city},IN",  # IN is the country code for India
+            "units": "metric"   # Use Celsius
+        }
+        
+        data = await make_openweather_request(url, params)
 
         if not data:
-            return f"Unable to fetch alerts for {state}. The weather service may be temporarily unavailable."
+            return f"Unable to fetch weather data for {city}. The weather service may be temporarily unavailable."
         
-        if "features" not in data:
-            return f"No alert data available for {state}."
-            
-        if not data["features"]:
-            return f"No active alerts for {state}."
+        if data.get("cod") != 200:
+            error_message = data.get("message", "Unknown error")
+            return f"Error fetching weather for {city}: {error_message}"
 
-        alerts = [format_alert(feature) for feature in data["features"]]
-        logger.info(f"Found {len(alerts)} alerts for {state}")
-        return "\n---\n".join(alerts)
+        formatted_weather = format_weather_condition(data)
+        logger.info(f"Successfully retrieved weather for {city}")
+        return formatted_weather
         
     except Exception as e:
-        logger.error(f"Error getting alerts for {state}: {e}")
-        return f"Error retrieving alerts for {state}. Please try again later."
+        logger.error(f"Error getting weather for {city}: {e}")
+        return f"Error retrieving weather for {city}. Please try again later."
 
 
 @mcp.tool()
-async def get_forecast(latitude: float, longitude: float) -> str:
-    """Get weather forecast for a location.
+async def get_forecast(city: str = None, latitude: float = None, longitude: float = None) -> str:
+    """Get 5-day weather forecast for an Indian location.
 
     Args:
-        latitude: Latitude of the location
-        longitude: Longitude of the location
+        city: Name of an Indian city (e.g. Mumbai, Delhi, Bangalore) - if provided, latitude/longitude are ignored
+        latitude: Latitude of the location (for coordinate-based queries)
+        longitude: Longitude of the location (for coordinate-based queries)
     """
     try:
-        # Validate coordinates
-        if not (-90 <= latitude <= 90):
-            return "Error: Latitude must be between -90 and 90 degrees."
-        if not (-180 <= longitude <= 180):
-            return "Error: Longitude must be between -180 and 180 degrees."
+        # Validate input - either city or coordinates must be provided
+        if city:
+            city = city.strip()
+            if len(city) < 2:
+                return "Error: Please provide a valid city name (e.g., Mumbai, Delhi, Bangalore)."
             
-        logger.info(f"Fetching forecast for coordinates: {latitude}, {longitude}")
+            logger.info(f"Fetching forecast for city: {city}")
+            params = {
+                "q": f"{city},IN",  # IN is the country code for India
+                "units": "metric"   # Use Celsius
+            }
+        elif latitude is not None and longitude is not None:
+            # Validate coordinates for India (approximately)
+            if not (6 <= latitude <= 37):  # India's latitude range
+                return "Error: Latitude must be within India's range (approximately 6° to 37° N)."
+            if not (68 <= longitude <= 97):  # India's longitude range
+                return "Error: Longitude must be within India's range (approximately 68° to 97° E)."
+            
+            logger.info(f"Fetching forecast for coordinates: {latitude}, {longitude}")
+            params = {
+                "lat": latitude,
+                "lon": longitude,
+                "units": "metric"   # Use Celsius
+            }
+        else:
+            return "Error: Please provide either a city name or both latitude and longitude coordinates."
         
-        # First get the forecast grid endpoint
-        points_url = f"{NWS_API_BASE}/points/{latitude},{longitude}"
-        points_data = await make_nws_request(points_url)
+        # Use OpenWeatherMap 5-day forecast API
+        url = f"{OPENWEATHER_API_BASE}/forecast"
+        data = await make_openweather_request(url, params)
 
-        if not points_data:
-            return "Unable to fetch forecast data for this location. The coordinates may be outside the US or the weather service may be unavailable."
+        if not data:
+            return "Unable to fetch forecast data. The weather service may be temporarily unavailable."
 
-        if "properties" not in points_data or "forecast" not in points_data["properties"]:
-            return "This location may be outside the US National Weather Service coverage area."
+        if data.get("cod") != "200":
+            error_message = data.get("message", "Unknown error")
+            return f"Error fetching forecast: {error_message}"
 
-        # Get the forecast URL from the points response
-        forecast_url = points_data["properties"]["forecast"]
-        forecast_data = await make_nws_request(forecast_url)
-
-        if not forecast_data:
-            return "Unable to fetch detailed forecast. Please try again later."
-
-        if "properties" not in forecast_data or "periods" not in forecast_data["properties"]:
-            return "Invalid forecast data received from weather service."
-
-        # Format the periods into a readable forecast
-        periods = forecast_data["properties"]["periods"]
+        # Format the forecast data
+        city_name = data.get("city", {}).get("name", "Unknown Location")
         forecasts = []
-        for period in periods[:5]:  # Only show next 5 periods
+        
+        # Group forecasts by day (OpenWeatherMap returns 3-hour intervals)
+        daily_forecasts = {}
+        for item in data.get("list", [])[:15]:  # Limit to next 5 days (3-hour intervals)
+            dt_txt = item.get("dt_txt", "")
+            date = dt_txt.split(" ")[0] if dt_txt else "Unknown"
+            
+            if date not in daily_forecasts:
+                daily_forecasts[date] = []
+            daily_forecasts[date].append(item)
+        
+        for date, periods in list(daily_forecasts.items())[:5]:  # Only show next 5 days
+            # Get representative data (midday if available, otherwise first available)
+            period = periods[len(periods)//2] if periods else periods[0]
+            
+            main = period.get("main", {})
+            weather = period.get("weather", [{}])[0]
+            wind = period.get("wind", {})
+            
             forecast = f"""
-{period.get('name', 'Unknown')}:
-Temperature: {period.get('temperature', 'N/A')}°{period.get('temperatureUnit', 'F')}
-Wind: {period.get('windSpeed', 'N/A')} {period.get('windDirection', '')}
-Forecast: {period.get('detailedForecast', 'No forecast available')}
+{date}:
+Weather: {weather.get('description', 'N/A').title()}
+Temperature: {main.get('temp', 'N/A')}°C (High: {main.get('temp_max', 'N/A')}°C, Low: {main.get('temp_min', 'N/A')}°C)
+Humidity: {main.get('humidity', 'N/A')}%
+Wind: {wind.get('speed', 'N/A')} m/s
+Pressure: {main.get('pressure', 'N/A')} hPa
 """
             forecasts.append(forecast)
 
-        logger.info(f"Successfully retrieved forecast with {len(forecasts)} periods")
-        return "\n---\n".join(forecasts)
+        result = f"5-Day Weather Forecast for {city_name}:\n" + "\n---\n".join(forecasts)
+        logger.info(f"Successfully retrieved forecast for {city_name}")
+        return result
         
     except Exception as e:
-        logger.error(f"Error getting forecast for {latitude}, {longitude}: {e}")
+        location = city if city else f"{latitude}, {longitude}"
+        logger.error(f"Error getting forecast for {location}: {e}")
         return f"Error retrieving forecast. Please try again later."
 
 
 @mcp.prompt()
 def get_initial_prompts() -> List[base.Message]:
     return [
-        base.UserMessage("You are a helpful assistant that can help with weather-related questions.")
+        base.UserMessage("You are a helpful assistant that can help with weather-related questions for India. You can provide current weather conditions and 5-day forecasts for Indian cities.")
     ]
 
 

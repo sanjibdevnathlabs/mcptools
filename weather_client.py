@@ -14,7 +14,7 @@ from mcp import ClientSession
 from mcp.client.sse import sse_client
 from openai import OpenAI
 from openai.types import Completion
-import google.generativeai as genai
+from google import genai
 
 load_dotenv() # load environment variables from .env
 
@@ -42,17 +42,18 @@ class MCPClient:
         print(f"Gemini API Key loaded: {'Yes' if self.gemini_available else 'No'}")
         
         if self.gemini_available:
-            genai.configure(api_key=gemini_key)
+            # The client gets the API key from the environment variable `GEMINI_API_KEY` automatically
+            self.gemini = genai.Client()
             # Choose your preferred Gemini model:
             # 🔥 RECOMMENDED: gemini-2.5-flash (newest, fastest, best balance)
             # 🧠 POWERFUL: gemini-2.5-pro (most capable)
             # 💰 BUDGET: gemini-1.5-flash-8b (cheapest)
             # ⚡ FAST: gemini-2.0-flash
-            gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-            print(f"Using Gemini model: {gemini_model}")
-            self.gemini = genai.GenerativeModel(gemini_model)
+            self.gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+            print(f"Using Gemini model: {self.gemini_model}")
         else:
             self.gemini = None
+            self.gemini_model = None
         
         # Check if at least one AI provider is available
         if not self.openai_available and not self.gemini_available:
@@ -166,7 +167,10 @@ class MCPClient:
                 tools_info = self._format_tools_for_gemini()
                 full_prompt = f"{tools_info}\n\nUser: {gemini_messages}"
                 
-                response = self.gemini.generate_content(full_prompt)
+                response = self.gemini.models.generate_content(
+                    model=self.gemini_model, 
+                    contents=full_prompt
+                )
                 print("✅ Gemini succeeded")
                 return {"provider": "gemini", "response": response}
             except Exception as e:
@@ -280,23 +284,39 @@ class MCPClient:
         
         # Check if the response contains a tool call (JSON format)
         try:
-            # Look for JSON in the response (handle markdown code blocks)
-            import re
-            # First try to find JSON in markdown code blocks (multiline)
-            json_match = re.search(r'```json\s*(\{.*?"tool_name".*?\})\s*```', response_text, re.DOTALL)
-            if not json_match:
-                # Fallback to plain JSON (multiline)
-                json_match = re.search(r'\{.*?"tool_name".*?\}', response_text, re.DOTALL)
+            # Debug: Print the raw response
+            print(f"Debug - Raw Gemini response: {repr(response_text)}")
             
-            if json_match:
-                # Extract JSON - use group(1) for markdown blocks, group() for plain JSON
-                tool_call_json = json_match.group(1) if json_match.lastindex else json_match.group()
+            # Try to parse the response as JSON directly (most common case)
+            tool_call_json = response_text.strip()
+            
+            # Check if it looks like JSON and contains tool_name
+            if tool_call_json.startswith('{') and tool_call_json.endswith('}') and '"tool_name"' in tool_call_json:
+                print(f"Debug - Attempting to parse as direct JSON: {repr(tool_call_json)}")
                 tool_call = json.loads(tool_call_json)
+            else:
+                # Fallback: look for JSON in markdown code blocks or embedded in text
+                import re
+                json_match = re.search(r'```json\s*(\{.*?"tool_name".*?\})\s*```', response_text, re.DOTALL)
+                if not json_match:
+                    json_match = re.search(r'(\{.*?"tool_name".*?\})', response_text, re.DOTALL)
                 
-                tool_name = tool_call["tool_name"]
-                tool_args = tool_call["parameters"]
-                
-                print(f"\n[Calling tool {tool_name} with args {tool_args}]...")
+                if json_match:
+                    tool_call_json = json_match.group(1).strip()
+                    print(f"Debug - Extracted JSON from text: {repr(tool_call_json)}")
+                    tool_call = json.loads(tool_call_json)
+                else:
+                    # Not a tool call, just regular text
+                    print(f"\nAssistant: {response_text}")
+                    return response_text
+            
+            # If we get here, we have a valid tool_call
+            tool_name = tool_call["tool_name"]
+            tool_args = tool_call["parameters"]
+            
+            print(f"\n[Calling tool {tool_name} with args {tool_args}]...")
+            
+            try:
                 result = await self.session.call_tool(tool_name, tool_args)
                 print(f"\nTool response: {result}")
                 
@@ -313,10 +333,11 @@ class MCPClient:
                 # Call AI again to process the tool result
                 response = await self.call_ai()
                 return await self.process_ai_response(response)
-            else:
-                # Regular text response
-                print(f"\nAssistant: {response_text}")
-                return response_text
+                
+            except Exception as tool_error:
+                print(f"\nERROR calling tool {tool_name}: {tool_error}")
+                print(f"Tool args were: {tool_args}")
+                return f"Sorry, I encountered an error calling the weather tool: {tool_error}"
                 
         except Exception as e:
             print(f"Error processing Gemini response: {e}")
