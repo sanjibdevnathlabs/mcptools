@@ -300,9 +300,6 @@ def create_starlette_app(mcp_server: Server, *, debug: bool = False) -> Starlett
     )
 
 
-
-
-
 def run_server_with_force_exit(host: str, port: int, debug: bool = True):
     """Run server with immediate exit on CTRL+C."""
     
