@@ -5,7 +5,7 @@ from collections import defaultdict
 from typing import Any, Dict, List, Optional
 from mcp.server import FastMCP, Server
 from mcp.server.fastmcp.prompts import base
-from .config import get_config
+from database.config import Config
 from .database_manager import DatabaseManager
 from .security import DatabaseSecurityManager
 from .monitoring import ProductionMonitor, MetricType
@@ -56,7 +56,7 @@ class DatabaseMCPServer:
     
     def __init__(self):
         """Initialize the database MCP server."""
-        self.config = get_config()
+        self.config = Config()
         self.logger = get_logger('server')
         self.database_manager = DatabaseManager()
         self.security_manager = DatabaseSecurityManager()
@@ -79,7 +79,7 @@ class DatabaseMCPServer:
         def get_initial_prompts() -> List[base.Message]:
             """Provide initial prompts for the MCP server."""
             readonly_notice = " (READ-ONLY MODE)" if self.config.mcp.readonly_mode else ""
-            allowed_queries = ", ".join(self.config.mcp.allowed_query_types)
+            allowed_queries = self.config.mcp.allowed_query_types
             
             return [
                 base.UserMessage(f"""
@@ -162,7 +162,25 @@ Remember: This server has enterprise-grade security monitoring. All queries are 
             async def execute_query(sql: str) -> Dict[str, Any]:
                 """Execute a SQL query and return results"""
                 try:
-                    # Execute query directly for now
+                    # SECURITY: Validate query before execution
+                    security_result = self.security_manager.validate_query_security(sql)
+                    
+                    if not security_result.get("safe", False):
+                        self.logger.warning("QUERY_SECURITY_BLOCKED", {
+                            "sql": sql[:100] + ('...' if len(sql) > 100 else ''),
+                            "threats": security_result.get("threats_detected", []),
+                            "risk_level": security_result.get("risk_level", "unknown")
+                        })
+                        return {
+                            "success": False,
+                            "error": "Query blocked by security validation",
+                            "sql": sql,
+                            "error_code": "SECURITY_VIOLATION",
+                            "threats": security_result.get("threats_detected", []),
+                            "risk_level": security_result.get("risk_level", "unknown")
+                        }
+                    
+                    # Execute query after security validation passed
                     result = await self.database_manager.execute_query(sql)
                     
                     return {

@@ -8,7 +8,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 import hashlib
 
-from .config import get_config
+from database.config import Config
 from .error_handling import DatabaseConnectionError, DatabaseQueryError, ValidationError
 from .logging_config import get_logger
 
@@ -139,7 +139,7 @@ class SchemaAnalyzer:
     
     def __init__(self):
         """Initialize schema analyzer."""
-        self.config = get_config()
+        self.config = Config()
     
     def analyze_table(self, table_info: TableInfo) -> Dict[str, Any]:
         """Analyze a table for potential issues and recommendations."""
@@ -467,7 +467,7 @@ class SchemaManager:
     def __init__(self, database_manager):
         """Initialize schema manager."""
         self.database_manager = database_manager
-        self.config = get_config()
+        self.config = Config()
         self.logger = get_logger('schema')
         self.analyzer = SchemaAnalyzer()
         self.comparator = SchemaComparator()

@@ -1,0 +1,32 @@
+# Database MCP Server - Production Environment Overrides
+# These settings override default.toml for production
+
+[database]
+# Larger pool for production load
+pool_size = 20
+
+# Strict timeout for production
+query_timeout = 30
+
+[server]
+# Info level logging for production
+log_level = "INFO"
+
+# Listen on all interfaces
+host = "0.0.0.0"
+
+[mcp]
+# Consider setting to true for read-only production access
+readonly_mode = false
+
+[security]
+# Stricter limits in production
+enable_sql_analysis = true
+max_rows_returned = 1000
+
+# Uncomment and configure for production SSL
+# enable_ssl = true
+# ssl_ca = "$SSL_CA_PATH"
+# ssl_cert = "$SSL_CERT_PATH"
+# ssl_key = "$SSL_KEY_PATH"
+

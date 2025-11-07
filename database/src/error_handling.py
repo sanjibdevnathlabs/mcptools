@@ -7,7 +7,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Callable, Type, Union, Tuple
 import random
 from functools import wraps
-from .config import get_config
+from database.config import Config
 from .logging_config import get_logger
 
 class ErrorSeverity(Enum):
@@ -523,7 +523,7 @@ class ErrorHandler:
     
     def __init__(self):
         """Initialize error handler."""
-        self.config = get_config()
+        self.config = Config()
         self.logger = get_logger('error_handling')
         self.retry_manager = RetryManager()
         self.circuit_breakers: Dict[str, CircuitBreaker] = {}

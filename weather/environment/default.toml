@@ -1,0 +1,22 @@
+# Weather MCP Server - Default Configuration
+# This file contains base configuration that applies to all environments
+
+[app]
+name = "weather-mcp"
+environment = "$APP_ENV"
+version = "1.0.0"
+
+[api]
+# OpenWeather API Configuration
+openweather_api_key = "$OPENWEATHER_API_KEY"
+openweather_api_base = "https://api.openweathermap.org/data/2.5"
+timeout = 30
+user_agent = "weather-app/1.0"
+
+[server]
+# Server configuration
+transport_mode = "stdio"  # Options: stdio, sse, streamable-http
+
+# Logging configuration
+log_level = "INFO"
+

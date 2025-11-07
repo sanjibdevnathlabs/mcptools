@@ -5,7 +5,7 @@ import signal
 import sys
 import threading
 import time
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import httpx
 import uvicorn
@@ -16,22 +16,19 @@ from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.routing import Mount, Route
 
-mcp = FastMCP("weather")
+from weather.config import Config
 
-OPENWEATHER_API_BASE = "https://api.openweathermap.org/data/2.5"
-USER_AGENT = "weather-app/1.0"
+# Initialize config
+config = Config()
+
+mcp = FastMCP(config.app.name)
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
+    level=getattr(logging, config.server.log_level),
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
-
-# Get API key from environment variable
-OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
-if not OPENWEATHER_API_KEY:
-    logger.warning("OPENWEATHER_API_KEY environment variable not set. Some features may not work.")
 
 # Global variables for shutdown handling
 shutdown_requested = False
@@ -59,22 +56,22 @@ def setup_aggressive_signal_handlers():
 
 async def make_openweather_request(url: str, params: Dict[str, Any] = None) -> Dict[str, Any] | None:
     """Make a request to the OpenWeatherMap API with proper error handling."""
-    if not OPENWEATHER_API_KEY:
+    if not config.api.openweather_api_key:
         logger.error("OpenWeatherMap API key not configured")
         return None
         
     headers = {
-        "User-Agent": USER_AGENT,
+        "User-Agent": config.api.user_agent,
         "Accept": "application/json"
     }
     
     # Add API key to parameters
     if params is None:
         params = {}
-    params["appid"] = OPENWEATHER_API_KEY
+    params["appid"] = config.api.openweather_api_key
 
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=float(config.api.timeout)) as client:
             logger.debug(f"Making request to: {url} with params: {params}")
             response = await client.get(url, headers=headers, params=params)
             response.raise_for_status()
@@ -137,7 +134,7 @@ async def get_current_weather(city: str) -> str:
         logger.info(f"Fetching current weather for city: {city}")
         
         # Use OpenWeatherMap current weather API
-        url = f"{OPENWEATHER_API_BASE}/weather"
+        url = f"{config.api.openweather_api_base}/weather"
         params = {
             "q": f"{city},IN",  # IN is the country code for India
             "units": "metric"   # Use Celsius
@@ -162,7 +159,7 @@ async def get_current_weather(city: str) -> str:
 
 
 @mcp.tool()
-async def get_forecast(city: str = None, latitude: float = None, longitude: float = None) -> str:
+async def get_forecast(city: Optional[str] = None, latitude: Optional[float] = None, longitude: Optional[float] = None) -> str:
     """Get 5-day weather forecast for an Indian location.
 
     Args:
@@ -199,7 +196,7 @@ async def get_forecast(city: str = None, latitude: float = None, longitude: floa
             return "Error: Please provide either a city name or both latitude and longitude coordinates."
         
         # Use OpenWeatherMap 5-day forecast API
-        url = f"{OPENWEATHER_API_BASE}/forecast"
+        url = f"{config.api.openweather_api_base}/forecast"
         data = await make_openweather_request(url, params)
 
         if not data:
@@ -332,17 +329,8 @@ def run_server_with_force_exit(host: str, port: int, debug: bool = True):
 
 
 def main():
-    """Main entry point with immediate exit on CTRL+C."""
-    import argparse
-
-    parser = argparse.ArgumentParser(description="Run MCP SSE-based weather server")
-    parser.add_argument('--host', default='0.0.0.0', help='Host to bind to')
-    parser.add_argument('--port', type=int, default=8080, help='Port to listen on')
-    parser.add_argument('--debug', action='store_true', help='Enable debug mode')
-    args = parser.parse_args()
-    
-    # Run server - signal handler will force exit on CTRL+C
-    run_server_with_force_exit(args.host, args.port, args.debug)
+    """Main entry point for weather server."""
+    mcp.run(transport=config.server.transport_mode)
 
 
 if __name__ == "__main__":

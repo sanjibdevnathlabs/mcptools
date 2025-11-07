@@ -3,7 +3,7 @@ import time
 from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Optional, Tuple, Union
 import aiomysql
-from .config import get_config
+from database.config import Config
 from .error_handling import DatabaseConnectionError, DatabaseQueryError, ResourceExhaustionError
 from .logging_config import get_logger
 
@@ -12,7 +12,7 @@ class DatabaseManager:
     
     def __init__(self):
         """Initialize the database manager."""
-        self.config = get_config()
+        self.config = Config()
         self.logger = get_logger('database')
         self.pool: Optional[aiomysql.Pool] = None
         self.connection_stats = {

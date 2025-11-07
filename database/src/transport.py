@@ -12,7 +12,7 @@ from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response, StreamingResponse
 from starlette.routing import Mount, Route
-from .config import get_config
+from database.config import Config
 from .database_manager import DatabaseManager
 from .logging_config import get_logger
 
@@ -28,7 +28,7 @@ class TransportManager:
         self.database_manager = database_manager
         self.mcp_server_instance = mcp_server_instance  # Store the DatabaseMCPServer instance
         self.fastmcp_server = fastmcp_server  # Store the FastMCP instance
-        self.config = get_config()
+        self.config = Config()
         self.logger = get_logger('transport')
         self.shutdown_requested = False
         
@@ -367,7 +367,7 @@ class AutoTransportManager(TransportManager):
 
 def create_transport_manager(mcp_server: Server, database_manager: DatabaseManager, mcp_server_instance=None, fastmcp_server=None) -> TransportManager:
     """Factory function to create the appropriate transport manager."""
-    config = get_config()
+    config = Config()
     
     if config.server.transport_mode == "auto":
         return AutoTransportManager(mcp_server, database_manager, mcp_server_instance, fastmcp_server)
@@ -392,7 +392,7 @@ async def run_transport(
         port: Port for SSE mode (optional, uses config default)
         mcp_server_instance: The DatabaseMCPServer instance for monitoring access
     """
-    config = get_config()
+    config = Config()
     transport_manager = create_transport_manager(mcp_server, database_manager, mcp_server_instance, fastmcp_server)
     
     # Use provided host/port or config defaults

@@ -1,0 +1,69 @@
+# Database MCP Server - Default Configuration
+# This file contains base configuration that applies to all environments
+
+[app]
+name = "database-mcp"
+environment = "$APP_ENV"
+version = "1.0.0"
+
+[database]
+# Database connection settings
+# Use environment variables for sensitive data
+host = "$DB_HOST"
+port = 3306
+user = "$DB_USER"
+password = "$DB_PASSWORD"
+database = "$DB_NAME"
+charset = "utf8mb4"
+
+# Connection pool settings
+pool_size = 10
+pool_recycle = 3600  # seconds
+
+# Query execution settings
+query_timeout = 30  # seconds
+max_query_length = 1048576  # 1MB
+
+[server]
+# Server configuration
+host = "localhost"
+port = 8080
+transport_mode = "stdio"  # Options: stdio, sse, streamable-http
+
+# Logging configuration
+log_level = "INFO"
+log_file = "logs/database_mcp.log"
+log_destination = "stderr"  # CRITICAL: Must be "file" or "stderr" for STDIO transport!
+
+[mcp]
+# MCP server configuration
+server_name = "database-mcp"
+readonly_mode = false
+
+# Allowed query types (comma-separated string, case-insensitive)
+# 
+# FINE-GRAINED RULES:
+# - "DROP" - allows any DROP operation (DATABASE, TABLE, INDEX, etc.)
+# - "DROP TABLE" - allows ONLY DROP TABLE, blocks DROP DATABASE  
+# - "DROP DATABASE" - allows ONLY DROP DATABASE, blocks DROP TABLE
+# - "CREATE TABLE, ALTER TABLE, DROP TABLE" - table-level DDL only
+#
+# EXAMPLES:
+# - Read-only: "SELECT, SHOW, DESCRIBE, EXPLAIN"
+# - Safe writes: "SELECT, INSERT, UPDATE, SHOW, DESCRIBE"
+# - Safe DDL: "SELECT, CREATE TABLE, ALTER TABLE, DROP TABLE"
+# - Full access: "SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, DROP"
+
+allowed_query_types = "SELECT, SHOW, DESCRIBE, EXPLAIN, UPDATE, INSERT, DELETE, CREATE, ALTER, DROP"
+
+[security]
+# Security settings
+enable_sql_analysis = true
+max_rows_returned = 1000
+
+# SSL/TLS configuration (optional)
+enable_ssl = false
+# ssl_ca = "/path/to/ca.pem"
+# ssl_cert = "/path/to/cert.pem"
+# ssl_key = "/path/to/key.pem"
+

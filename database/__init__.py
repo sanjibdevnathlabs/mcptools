@@ -9,18 +9,22 @@ __version__ = "1.0.0"
 __author__ = "Database MCP Team"
 
 # Import main components for easier access
-from .config import get_config, AppConfig
-from .server import DatabaseMCPServer
-from .database_manager import DatabaseManager
-from .transport import run_transport, create_transport_manager
-from .security import DatabaseSecurityManager, QuerySecurityAnalyzer, ConnectionSecurityManager
-from .monitoring import ProductionMonitor, PerformanceTracker, SystemResourceMonitor, ErrorTracker, HealthChecker
-from .error_handling import ErrorHandler, DatabaseMCPError, DatabaseConnectionError, SecurityViolationError, ValidationError
-from .schema_manager import SchemaManager, SchemaAnalyzer, SchemaComparator, DatabaseInfo, TableInfo, ColumnInfo, IndexInfo, ConstraintInfo, SchemaSnapshot
+from database.config import Config, AppConfig, DatabaseConfig, ServerConfig, MCPConfig, SecurityConfig
+from database.src.server import DatabaseMCPServer
+from database.src.database_manager import DatabaseManager
+from database.src.transport import run_transport, create_transport_manager
+from database.src.security import DatabaseSecurityManager, QuerySecurityAnalyzer, ConnectionSecurityManager
+from database.src.monitoring import ProductionMonitor, PerformanceTracker, SystemResourceMonitor, ErrorTracker, HealthChecker
+from database.src.error_handling import ErrorHandler, DatabaseMCPError, DatabaseConnectionError, SecurityViolationError, ValidationError
+from database.src.schema_manager import SchemaManager, SchemaAnalyzer, SchemaComparator, DatabaseInfo, TableInfo, ColumnInfo, IndexInfo, ConstraintInfo, SchemaSnapshot
 
 __all__ = [
-    "get_config", 
+    "Config",
     "AppConfig",
+    "DatabaseConfig",
+    "ServerConfig",
+    "MCPConfig",
+    "SecurityConfig",
     "DatabaseMCPServer",
     "DatabaseManager",
     "run_transport",

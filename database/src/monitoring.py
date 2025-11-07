@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional, Set, Callable
 import json
 import psutil
 import os
-from .config import get_config
+from database.config import Config
 from .logging_config import get_logger
 
 class HealthStatus(Enum):
@@ -102,7 +102,7 @@ class PerformanceTracker:
                 self.error_counts[query_type.upper()] += 1
             
             # Track slow queries (>1 second by default)
-            config = get_config()
+            config = Config()
             slow_query_threshold = getattr(config.database, 'slow_query_threshold', 1.0)
             if execution_time > slow_query_threshold:
                 self.slow_queries.append({
@@ -316,7 +316,7 @@ class HealthChecker:
         """Initialize health checker."""
         self.database_manager = database_manager
         self.security_manager = security_manager
-        self.config = get_config()
+        self.config = Config()
         self.logger = get_logger('monitoring')
         
         # Health check registry
@@ -576,7 +576,7 @@ class ProductionMonitor:
         """Initialize production monitor."""
         self.database_manager = database_manager
         self.security_manager = security_manager
-        self.config = get_config()
+        self.config = Config()
         self.logger = get_logger('monitoring')
         
         # Initialize monitoring components

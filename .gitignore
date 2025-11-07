@@ -21,3 +21,6 @@ wheels/
 .env.test
 .env.production
 .env
+
+# Development TOML configs (contains developer-specific settings)
+**/dev.toml

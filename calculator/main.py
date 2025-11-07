@@ -1,8 +1,12 @@
 import math
 
 from mcp.server import FastMCP
+from calculator.config import Config
 
-mcp = FastMCP("demo")
+# Initialize config
+config = Config()
+
+mcp = FastMCP(config.app.name)
 
 # DEFINE TOOLS
 
@@ -90,5 +94,10 @@ def get_greeting(name: str) -> str:
     return f"Hellp {name}"
 
 
+def main():
+    """Main entry point for calculator server."""
+    mcp.run(transport=config.server.transport_mode)
+
+
 if __name__ == "__main__":
-    mcp.run(transport="stdio")
+    main()

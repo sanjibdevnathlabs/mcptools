@@ -6,7 +6,7 @@ from collections import defaultdict, deque
 from typing import Any, Dict, List, Optional, Set, Tuple
 import sqlparse
 from sqlparse import sql, tokens as T
-from .config import get_config
+from database.config import Config
 from .logging_config import get_logger
 
 class SecurityAuditLogger:
@@ -58,7 +58,7 @@ class QuerySecurityAnalyzer:
     
     def __init__(self):
         """Initialize query security analyzer."""
-        self.config = get_config()
+        self.config = Config()
         self.logger = get_logger('security')
         self.audit_logger = SecurityAuditLogger()
         
@@ -229,15 +229,24 @@ class QuerySecurityAnalyzer:
         try:
             parsed = sqlparse.parse(sql)[0]
             
-            # Check for dangerous operations
-            for token in parsed.flatten():
+            # Check for dangerous operations with context extraction
+            tokens = list(parsed.flatten())
+            for i, token in enumerate(tokens):
                 if token.ttype in (T.Keyword, T.Keyword.DDL, T.Keyword.DML):
                     keyword = token.value.upper()
                     if keyword in self.high_risk_keywords:
-                        if not self._is_keyword_allowed(keyword):
+                        # Extract context (next keyword for fine-grained rules)
+                        context = None
+                        if i + 1 < len(tokens):
+                            next_token = tokens[i + 1]
+                            if next_token.ttype in (T.Keyword, T.Keyword.DDL, T.Keyword.DML):
+                                context = next_token.value.upper()
+                        
+                        if not self._is_keyword_allowed(keyword, context):
+                            context_str = f" {context}" if context else ""
                             threats.append({
                                 "type": "dangerous_operation",
-                                "description": f"High-risk keyword detected: {keyword}",
+                                "description": f"High-risk keyword detected: {keyword}{context_str}",
                                 "severity": "high",
                                 "keyword": keyword
                             })
@@ -324,13 +333,41 @@ class QuerySecurityAnalyzer:
         
         return threats
     
-    def _is_keyword_allowed(self, keyword: str) -> bool:
-        """Check if a keyword is allowed based on configuration."""
+    def _is_keyword_allowed(self, keyword: str, context: str = None) -> bool:
+        """
+        Check if a keyword is allowed based on configuration.
+        
+        Supports fine-grained rules:
+        - "DROP" allows any DROP operation
+        - "DROP TABLE" allows ONLY DROP TABLE, blocks DROP DATABASE
+        - "DROP DATABASE" allows ONLY DROP DATABASE
+        
+        Args:
+            keyword: SQL keyword (e.g., "DROP")
+            context: Additional context (e.g., "TABLE", "DATABASE")
+            
+        Returns:
+            True if allowed, False otherwise
+        """
         if self.config.mcp.readonly_mode:
             return keyword in {'SELECT', 'SHOW', 'DESCRIBE', 'DESC', 'EXPLAIN', 'ANALYZE'}
         
-        # Check against configured allowed query types
-        allowed_types = [q.upper() for q in self.config.mcp.allowed_query_types]
+        # Get allowed query types as list
+        allowed_types = self.config.mcp.get_allowed_query_types_list()
+        
+        # Check for exact match with context (fine-grained rule)
+        if context:
+            compound_rule = f"{keyword} {context}"
+            if compound_rule in allowed_types:
+                return True
+            
+            # If compound rules exist for this keyword, keyword alone is NOT allowed
+            # Example: ["DROP TABLE"] means DROP DATABASE is blocked
+            has_compound_rules = any(rule.startswith(f"{keyword} ") for rule in allowed_types)
+            if has_compound_rules:
+                return False
+        
+        # Check for keyword alone (allows any variation)
         return keyword in allowed_types
     
     def _generate_security_recommendations(self, threats: List[Dict], query_type: str) -> List[str]:
@@ -368,7 +405,7 @@ class ConnectionSecurityManager:
     
     def __init__(self):
         """Initialize connection security manager."""
-        self.config = get_config()
+        self.config = Config()
         self.audit_logger = SecurityAuditLogger()
         
         # Connection tracking
@@ -514,7 +551,7 @@ class DatabaseSecurityManager:
     
     def __init__(self):
         """Initialize the database security manager."""
-        self.config = get_config()
+        self.config = Config()
         self.logger = get_logger('security')
         self.query_analyzer = QuerySecurityAnalyzer()
         self.connection_manager = ConnectionSecurityManager()

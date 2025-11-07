@@ -3,7 +3,7 @@
 Database MCP Server - Main Entry Point
 
 A production-grade Model Context Protocol (MCP) server for MySQL database interactions.
-Supports both stdio and SSE transport modes with comprehensive security and monitoring.
+Supports stdio, SSE, and streamable-http transport modes with comprehensive security and monitoring.
 
 Usage:
     # Stdio mode (for uvx/mcp-client)
@@ -12,8 +12,8 @@ Usage:
     # SSE mode (HTTP server)
     python -m database --transport sse --host 0.0.0.0 --port 8080
     
-    # Auto-detect mode
-    python -m database --transport auto
+    # Streamable HTTP mode
+    python -m database --transport streamable-http
 """
 
 import argparse
@@ -21,10 +21,10 @@ import asyncio
 import sys
 from typing import Optional
 
-from .config import get_config, reload_config
-from .server import DatabaseMCPServer
-from .transport import run_transport
-from .logging_config import setup_logging, get_logger, generate_trace_id
+from database.config import Config
+from database.src.server import DatabaseMCPServer
+from database.src.transport import run_transport
+from database.src.logging_config import setup_logging, get_logger, generate_trace_id
 
 def create_argument_parser() -> argparse.ArgumentParser:
     """Create and configure argument parser."""
@@ -36,7 +36,7 @@ Examples:
   %(prog)s --transport stdio                    # Run with stdio transport
   %(prog)s --transport sse                      # Run with SSE transport on default host:port
   %(prog)s --transport sse --host 0.0.0.0 --port 3000  # SSE with custom host:port
-  %(prog)s --transport auto                     # Auto-detect transport mode
+  %(prog)s --transport streamable-http          # Run with streamable-http transport
   %(prog)s --config-check                       # Validate configuration only
         """
     )
@@ -44,7 +44,7 @@ Examples:
     # Transport options
     parser.add_argument(
         "--transport", 
-        choices=["stdio", "sse", "streamable-http", "auto"],
+        choices=["stdio", "sse", "streamable-http"],
         default=None,
         help="Transport mode (overrides config setting)"
     )
@@ -97,12 +97,6 @@ Examples:
         help="Validate configuration and exit"
     )
     
-    parser.add_argument(
-        "--config-reload",
-        action="store_true",
-        help="Reload configuration from environment"
-    )
-    
     # Version
     parser.add_argument(
         "--version",
@@ -115,21 +109,26 @@ Examples:
 def validate_configuration() -> bool:
     """Validate configuration and return success status."""
     try:
-        config = get_config()
-        print("✅ Configuration validation successful")
-        print(f"📊 Database: {config.get_database_dsn()}")
-        print(f"🚀 Transport: {config.server.transport_mode}")
-        print(f"🛡️  Security: {'Read-only' if config.mcp.readonly_mode else 'Full access'}")
-        print(f"⚡ Rate limiting: {'Enabled' if config.mcp.enable_rate_limiting else 'Disabled'}")
+        config = Config()
+        logger = get_logger('database.main')
+        logger.info("CONFIG_VALIDATION_SUCCESS", {
+            "database_host": config.database.host,
+            "database_port": config.database.port,
+            "database_name": config.database.database,
+            "transport_mode": config.server.transport_mode,
+            "readonly_mode": config.mcp.readonly_mode,
+            "sql_analysis_enabled": config.security.enable_sql_analysis
+        })
         return True
     except Exception as e:
-        print(f"❌ Configuration validation failed: {e}")
+        logger = get_logger('database.main')
+        logger.error("CONFIG_VALIDATION_FAILED", {"error": str(e)})
         return False
 
 async def cli_test_mode(test_query: str = None):
     """CLI testing mode to test tools directly without transport."""
     # Setup logging for CLI test mode
-    config = get_config()
+    config = Config()
     loggers = setup_logging(config)
     logger = loggers['main']
     trace_id = generate_trace_id()
@@ -234,8 +233,8 @@ async def run_server(
 ) -> None:
     """Run the database MCP server with the specified options."""
     try:
-        # Get configuration (reload if requested)
-        config = get_config()
+        # Get configuration
+        config = Config()
         
         # Override config with command line arguments
         if transport_mode:
@@ -244,25 +243,17 @@ async def run_server(
             config.server.host = host
         if port:
             config.server.port = port
-        if debug is not None:
-            config.server.debug = debug
         if log_level:
             config.server.log_level = log_level
         
-        # Set up logging with new system
+        # Set up logging
         loggers = setup_logging(config)
         logger = loggers['main']
         
         # Generate trace ID for this server session
         trace_id = generate_trace_id()
         
-        logger.info("SERVER_STARTING", {
-            "trace_id": trace_id,
-            "transport_mode": config.server.transport_mode,
-            "database_dsn": config.get_database_dsn(),
-            "log_format": config.server.log_format,
-            "log_destination": config.server.log_destination
-        })
+        logger.info(f"SERVER_STARTING: trace_id={trace_id}, transport={config.server.transport_mode}, db={config.database.host}:{config.database.port}")
         
         # Create and initialize the MCP server
         mcp_server_instance = DatabaseMCPServer()
@@ -291,15 +282,6 @@ def main() -> None:
     parser = create_argument_parser()
     args = parser.parse_args()
     
-    # Handle configuration reload
-    if args.config_reload:
-        try:
-            reload_config()
-            print("✅ Configuration reloaded successfully")
-        except Exception as e:
-            print(f"❌ Failed to reload configuration: {e}")
-            sys.exit(1)
-    
     # Handle configuration check
     if args.config_check:
         success = validate_configuration()
@@ -327,10 +309,11 @@ def main() -> None:
             log_level=args.log_level
         ))
     except KeyboardInterrupt:
-        print("\n👋 Database MCP Server stopped")
+        # Silent exit on keyboard interrupt
         sys.exit(0)
     except Exception as e:
-        print(f"❌ Fatal error: {e}")
+        # Log to stderr for fatal errors
+        sys.stderr.write(f"Fatal error: {e}\n")
         sys.exit(1)
 
 if __name__ == "__main__":
