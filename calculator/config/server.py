@@ -3,6 +3,5 @@
 
 class ServerConfig:
     """Server configuration from [server] section"""
-    
-    transport_mode: str = "stdio"
 
+    transport_mode: str = "stdio"

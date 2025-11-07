@@ -1,11 +1,7 @@
-import asyncio
 import logging
 import os
 import signal
-import sys
-import threading
-import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 import httpx
 import uvicorn
@@ -26,7 +22,7 @@ mcp = FastMCP(config.app.name)
 # Configure logging
 logging.basicConfig(
     level=getattr(logging, config.server.log_level),
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
 
@@ -38,10 +34,10 @@ server_instance = None
 def force_shutdown_handler(signum, frame):
     """Immediate shutdown handler that forces process exit."""
     global shutdown_requested
-    
+
     logger.info(f"Received signal {signum}. Forcing immediate shutdown...")
     logger.info("Disconnecting all MCP clients and exiting...")
-    
+
     # Force immediate exit - no graceful shutdown
     os._exit(0)
 
@@ -50,21 +46,20 @@ def setup_aggressive_signal_handlers():
     """Setup signal handlers that will actually exit the process."""
     signal.signal(signal.SIGINT, force_shutdown_handler)
     signal.signal(signal.SIGTERM, force_shutdown_handler)
-    if hasattr(signal, 'SIGBREAK'):
+    if hasattr(signal, "SIGBREAK"):
         signal.signal(signal.SIGBREAK, force_shutdown_handler)
 
 
-async def make_openweather_request(url: str, params: Dict[str, Any] = None) -> Dict[str, Any] | None:
+async def make_openweather_request(
+    url: str, params: dict[str, Any] = None
+) -> dict[str, Any] | None:
     """Make a request to the OpenWeatherMap API with proper error handling."""
     if not config.api.openweather_api_key:
         logger.error("OpenWeatherMap API key not configured")
         return None
-        
-    headers = {
-        "User-Agent": config.api.user_agent,
-        "Accept": "application/json"
-    }
-    
+
+    headers = {"User-Agent": config.api.user_agent, "Accept": "application/json"}
+
     # Add API key to parameters
     if params is None:
         params = {}
@@ -95,17 +90,17 @@ def format_weather_condition(data: dict) -> str:
     main = data.get("main", {})
     weather = data.get("weather", [{}])[0]
     wind = data.get("wind", {})
-    
+
     # Check for severe weather conditions
     weather_main = weather.get("main", "").lower()
     description = weather.get("description", "")
-    
+
     severity_indicator = ""
     if weather_main in ["thunderstorm", "tornado", "hurricane"]:
         severity_indicator = "⚠️ SEVERE WEATHER ALERT"
     elif weather_main in ["rain", "snow", "drizzle"]:
         severity_indicator = "🌧️ Weather Advisory"
-    
+
     return f"""
 {severity_indicator}
 Location: {data.get('name', 'Unknown')}
@@ -129,22 +124,22 @@ async def get_current_weather(city: str) -> str:
         # Validate city name
         if not city or len(city.strip()) < 2:
             return "Error: Please provide a valid city name (e.g., Mumbai, Delhi, Bangalore)."
-        
+
         city = city.strip()
         logger.info(f"Fetching current weather for city: {city}")
-        
+
         # Use OpenWeatherMap current weather API
         url = f"{config.api.openweather_api_base}/weather"
         params = {
             "q": f"{city},IN",  # IN is the country code for India
-            "units": "metric"   # Use Celsius
+            "units": "metric",  # Use Celsius
         }
-        
+
         data = await make_openweather_request(url, params)
 
         if not data:
             return f"Unable to fetch weather data for {city}. The weather service may be temporarily unavailable."
-        
+
         if data.get("cod") != 200:
             error_message = data.get("message", "Unknown error")
             return f"Error fetching weather for {city}: {error_message}"
@@ -152,14 +147,18 @@ async def get_current_weather(city: str) -> str:
         formatted_weather = format_weather_condition(data)
         logger.info(f"Successfully retrieved weather for {city}")
         return formatted_weather
-        
+
     except Exception as e:
         logger.error(f"Error getting weather for {city}: {e}")
         return f"Error retrieving weather for {city}. Please try again later."
 
 
 @mcp.tool()
-async def get_forecast(city: Optional[str] = None, latitude: Optional[float] = None, longitude: Optional[float] = None) -> str:
+async def get_forecast(
+    city: Optional[str] = None,
+    latitude: Optional[float] = None,
+    longitude: Optional[float] = None,
+) -> str:
     """Get 5-day weather forecast for an Indian location.
 
     Args:
@@ -173,11 +172,11 @@ async def get_forecast(city: Optional[str] = None, latitude: Optional[float] = N
             city = city.strip()
             if len(city) < 2:
                 return "Error: Please provide a valid city name (e.g., Mumbai, Delhi, Bangalore)."
-            
+
             logger.info(f"Fetching forecast for city: {city}")
             params = {
                 "q": f"{city},IN",  # IN is the country code for India
-                "units": "metric"   # Use Celsius
+                "units": "metric",  # Use Celsius
             }
         elif latitude is not None and longitude is not None:
             # Validate coordinates for India (approximately)
@@ -185,16 +184,16 @@ async def get_forecast(city: Optional[str] = None, latitude: Optional[float] = N
                 return "Error: Latitude must be within India's range (approximately 6° to 37° N)."
             if not (68 <= longitude <= 97):  # India's longitude range
                 return "Error: Longitude must be within India's range (approximately 68° to 97° E)."
-            
+
             logger.info(f"Fetching forecast for coordinates: {latitude}, {longitude}")
             params = {
                 "lat": latitude,
                 "lon": longitude,
-                "units": "metric"   # Use Celsius
+                "units": "metric",  # Use Celsius
             }
         else:
             return "Error: Please provide either a city name or both latitude and longitude coordinates."
-        
+
         # Use OpenWeatherMap 5-day forecast API
         url = f"{config.api.openweather_api_base}/forecast"
         data = await make_openweather_request(url, params)
@@ -209,25 +208,27 @@ async def get_forecast(city: Optional[str] = None, latitude: Optional[float] = N
         # Format the forecast data
         city_name = data.get("city", {}).get("name", "Unknown Location")
         forecasts = []
-        
+
         # Group forecasts by day (OpenWeatherMap returns 3-hour intervals)
         daily_forecasts = {}
-        for item in data.get("list", [])[:15]:  # Limit to next 5 days (3-hour intervals)
+        for item in data.get("list", [])[
+            :15
+        ]:  # Limit to next 5 days (3-hour intervals)
             dt_txt = item.get("dt_txt", "")
             date = dt_txt.split(" ")[0] if dt_txt else "Unknown"
-            
+
             if date not in daily_forecasts:
                 daily_forecasts[date] = []
             daily_forecasts[date].append(item)
-        
+
         for date, periods in list(daily_forecasts.items())[:5]:  # Only show next 5 days
             # Get representative data (midday if available, otherwise first available)
-            period = periods[len(periods)//2] if periods else periods[0]
-            
+            period = periods[len(periods) // 2] if periods else periods[0]
+
             main = period.get("main", {})
             weather = period.get("weather", [{}])[0]
             wind = period.get("wind", {})
-            
+
             forecast = f"""
 {date}:
 Weather: {weather.get('description', 'N/A').title()}
@@ -238,20 +239,24 @@ Pressure: {main.get('pressure', 'N/A')} hPa
 """
             forecasts.append(forecast)
 
-        result = f"5-Day Weather Forecast for {city_name}:\n" + "\n---\n".join(forecasts)
+        result = f"5-Day Weather Forecast for {city_name}:\n" + "\n---\n".join(
+            forecasts
+        )
         logger.info(f"Successfully retrieved forecast for {city_name}")
         return result
-        
+
     except Exception as e:
         location = city if city else f"{latitude}, {longitude}"
         logger.error(f"Error getting forecast for {location}: {e}")
-        return f"Error retrieving forecast. Please try again later."
+        return "Error retrieving forecast. Please try again later."
 
 
 @mcp.prompt()
-def get_initial_prompts() -> List[base.Message]:
+def get_initial_prompts() -> list[base.Message]:
     return [
-        base.UserMessage("You are a helpful assistant that can help with weather-related questions for India. You can provide current weather conditions and 5-day forecasts for Indian cities.")
+        base.UserMessage(
+            "You are a helpful assistant that can help with weather-related questions for India. You can provide current weather conditions and 5-day forecasts for Indian cities."
+        )
     ]
 
 
@@ -273,7 +278,7 @@ def create_starlette_app(mcp_server: Server, *, debug: bool = False) -> Starlett
                 if shutdown_requested:
                     logger.info("Shutdown requested, closing SSE connection")
                     return
-                    
+
                 await mcp_server.run(
                     read_stream,
                     write_stream,
@@ -292,23 +297,25 @@ def create_starlette_app(mcp_server: Server, *, debug: bool = False) -> Starlett
         debug=debug,
         routes=[
             Route("/sse", endpoint=handle_sse),
-            Mount("/messages/", app=sse.handle_post_message)
-        ]
+            Mount("/messages/", app=sse.handle_post_message),
+        ],
     )
 
 
 def run_server_with_force_exit(host: str, port: int, debug: bool = True):
     """Run server with immediate exit on CTRL+C."""
-    
+
     mcp_server = mcp._mcp_server  # noqa: WPS437
     starlette_app = create_starlette_app(mcp_server, debug=debug)
-    
+
     logger.info(f"Starting weather MCP server on {host}:{port}")
-    logger.info("Press CTRL+C to immediately stop the server and disconnect all clients")
-    
+    logger.info(
+        "Press CTRL+C to immediately stop the server and disconnect all clients"
+    )
+
     # Install signal handlers before starting
     setup_aggressive_signal_handlers()
-    
+
     try:
         # Use simple uvicorn.run - when CTRL+C is pressed, signal handler will os._exit(0)
         uvicorn.run(
@@ -318,11 +325,11 @@ def run_server_with_force_exit(host: str, port: int, debug: bool = True):
             log_level="info" if not debug else "debug",
             access_log=True,
             reload=False,
-            use_colors=True
+            use_colors=True,
         )
     except Exception as e:
         logger.error(f"Server error: {e}")
-    
+
     # This should never be reached due to os._exit(0) in signal handler
     logger.info("Server exiting normally")
     os._exit(0)

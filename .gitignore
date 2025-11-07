@@ -24,3 +24,15 @@ wheels/
 
 # Development TOML configs (contains developer-specific settings)
 **/dev.toml
+
+# Type checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Linting
+.ruff_cache/
+
+# Logs
+logs/
+*.log

@@ -8,4 +8,3 @@ This package contains the core business logic for the Database MCP Server.
 # Import minimal exports to avoid circular dependencies
 
 __all__ = []
-

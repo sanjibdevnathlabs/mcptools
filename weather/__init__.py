@@ -7,7 +7,7 @@ A Model Context Protocol (MCP) server for weather information using OpenWeatherM
 __version__ = "1.0.0"
 __author__ = "Weather MCP Team"
 
-from weather.config import Config, AppConfig, APIConfig, ServerConfig
+from weather.config import APIConfig, AppConfig, Config, ServerConfig
 
 __all__ = [
     "Config",
@@ -15,4 +15,3 @@ __all__ = [
     "APIConfig",
     "ServerConfig",
 ]
-

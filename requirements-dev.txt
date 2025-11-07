@@ -1,0 +1,10 @@
+# Development dependencies
+# Formatting
+black==24.4.2
+
+# Linting
+ruff==0.4.8
+
+# Type checking
+mypy==1.10.0
+

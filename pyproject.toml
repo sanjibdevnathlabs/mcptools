@@ -1,0 +1,111 @@
+[tool.black]
+line-length = 88
+target-version = ['py311']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.mypy_cache
+  | \.ruff_cache
+  | \.venv
+  | venv
+  | build
+  | dist
+)/
+'''
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+# Exclude directories
+exclude = [
+    ".eggs",
+    ".git",
+    ".mypy_cache",
+    ".ruff_cache",
+    ".venv",
+    "venv",
+    "build",
+    "dist",
+    "__pycache__",
+]
+
+[tool.ruff.lint]
+# Enable pycodestyle (E), pyflakes (F), isort (I), and other checks
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "N",   # pep8-naming
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "SIM", # flake8-simplify
+]
+
+ignore = [
+    "E501",   # line too long (handled by black)
+    "B008",   # do not perform function calls in argument defaults (FastMCP uses this pattern)
+    "UP007",  # Use X | Y for type annotations (not compatible with Python 3.10)
+    "SIM102", # Use single if statement - often reduces readability
+    "SIM117", # Use single with statement - sometimes less clear
+    "B904",   # Within except clause, raise with from err - existing pattern
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]  # Allow unused imports in __init__.py
+
+[tool.ruff.lint.isort]
+known-first-party = ["database", "weather", "calculator"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = false  # Disabled for now - too many existing issues
+warn_unused_configs = true
+disallow_untyped_defs = false  # Will enable gradually
+ignore_missing_imports = true  # Ignore missing stubs for third-party libraries
+strict_optional = false  # Disabled - causes many false positives in existing code
+no_implicit_optional = false  # Disabled - existing code uses implicit optional
+check_untyped_defs = false  # Don't check bodies of untyped functions
+
+# Per-module options - Ignore errors in existing code, enforce on new config layers
+[[tool.mypy.overrides]]
+module = "database.src.*"
+ignore_errors = true  # Existing code - will fix gradually
+
+[[tool.mypy.overrides]]
+module = "database.docs.*"
+ignore_errors = true  # Documentation examples
+
+[[tool.mypy.overrides]]
+module = "weather.main"
+ignore_errors = true  # Existing code - will fix gradually
+
+[[tool.mypy.overrides]]
+module = "weather.client"
+ignore_errors = true  # Existing code
+
+[[tool.mypy.overrides]]
+module = "calculator.main"
+ignore_errors = true  # Simple calculator - minimal typing needed
+
+# Enforce type checking on new config layers
+[[tool.mypy.overrides]]
+module = "database.config.*"
+ignore_errors = false
+warn_return_any = false
+
+[[tool.mypy.overrides]]
+module = "weather.config.*"
+ignore_errors = false
+warn_return_any = false
+
+[[tool.mypy.overrides]]
+module = "calculator.config.*"
+ignore_errors = false
+warn_return_any = false
+

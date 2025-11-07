@@ -5,7 +5,7 @@ from typing import Optional
 
 class ServerConfig:
     """Server configuration from [server] section"""
-    
+
     host: str = "localhost"
     port: int = 8080
     transport_mode: str = "stdio"
@@ -25,4 +25,3 @@ class ServerConfig:
     log_max_file_size: str = "10MB"
     log_backup_count: int = 5
     log_file_path: str = "logs/database_mcp.log"  # Alias for log_file
-

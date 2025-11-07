@@ -5,7 +5,7 @@ from typing import Optional
 
 class DatabaseConfig:
     """Database connection configuration from [database] section"""
-    
+
     host: str = "localhost"
     port: int = 3306
     user: Optional[str] = None
@@ -18,4 +18,3 @@ class DatabaseConfig:
     query_timeout: int = 30
     max_query_length: int = 1048576  # 1MB
     max_rows_limit: int = 1000  # Maximum rows returned per query
-
