@@ -1,0 +1,10 @@
+# Weather MCP Server - Production Environment Overrides
+# These settings override default.toml for production
+
+[server]
+# Info level logging for production
+log_level = "INFO"
+
+# Listen on all interfaces
+host = "0.0.0.0"
+

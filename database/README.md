@@ -40,44 +40,53 @@ A production-grade Model Context Protocol (MCP) server for MySQL database intera
 ## 📦 Installation
 
 ### Prerequisites
-- Python 3.8+
+- Python 3.11+ (3.10+ with `tomli` for TOML parsing)
 - MySQL 5.7+ or MariaDB 10.3+
-- Virtual environment (recommended)
+- Virtual environment (strongly recommended)
 
 ### Quick Setup
 
 ```bash
 # Clone the repository
 git clone <repository-url>
-cd mcptools/database
+cd mcptools
 
 # Create and activate virtual environment
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # Install dependencies
-pip install -r ../requirements.txt
+pip install -r requirements.txt
 
-# Create environment configuration (see docs/ENVIRONMENT.md for complete reference)
-# Copy the example configuration and edit with your credentials
-cp docs/env.example .env
-# Edit .env with your actual database credentials:
-#   DATABASE_HOST=localhost
-#   DATABASE_PORT=3306  
-#   DATABASE_USER=your_username
-#   DATABASE_PASSWORD=your_password
-# DATABASE_DATABASE is optional - leave empty to access any database on the host
+# Create development configuration
+# Create database/environment/dev.toml with your credentials:
+cat > database/environment/dev.toml <<EOF
+[database]
+host = "localhost"
+user = "root"
+password = "your_password"
+database = ""  # Empty = connect to any database on the host
 
-# Run the server (stdio transport by default)
+[server]
+transport_mode = "stdio"
+log_level = "INFO"
+
+[mcp]
+# Comma-separated allowed query types
+allowed_query_types = "SHOW, DESCRIBE, SELECT"
+EOF
+
+# Run the server (uses config from environment/default.toml + dev.toml)
 python -m database
 
-# Or specify transport mode
+# Or specify transport mode via CLI (overrides config)
 python -m database --transport sse --port 8080
 python -m database --transport streamable-http --port 8080
 
 # For CLI testing and development
 python -m database --test-tools
 python -m database --test-query "SHOW DATABASES"
+python -m database --config-check  # Validate configuration
 ```
 
 ### Dependencies
@@ -128,65 +137,236 @@ This flexibility makes the MCP server ideal for:
 
 ## ⚙️ Configuration
 
-### Environment Variables
+### TOML-Based Configuration
 
-Create a `.env` file in the project root:
+The database server uses a hierarchical TOML configuration system with three layers:
 
-```bash
-# Database Connection (Required)
-DB_HOST=localhost
-DB_PORT=3306
-DB_USER=your_username
-DB_PASSWORD=your_password
-DB_CHARSET=utf8mb4
+1. **`database/environment/default.toml`** - Base configuration (committed to git)
+2. **`database/environment/dev.toml`** - Development overrides (gitignored, create locally)
+3. **`database/environment/prod.toml`** - Production overrides (committed to git)
 
-# Connection Pool Settings
-DB_POOL_MIN_SIZE=5
-DB_POOL_MAX_SIZE=20
-DB_POOL_RECYCLE=3600
-DB_CONNECT_TIMEOUT=10
-DB_QUERY_TIMEOUT=30
+### Configuration Files
 
-# SSL Configuration (Optional)
-DB_SSL_ENABLE=false
-DB_SSL_CA_FILE=/path/to/ca.pem
-DB_SSL_CERT_FILE=/path/to/client-cert.pem
-DB_SSL_KEY_FILE=/path/to/client-key.pem
+**`database/environment/default.toml`** (Base configuration):
 
-# Server Configuration
-SERVER_HOST=127.0.0.1
-SERVER_PORT=8000
-SERVER_DEBUG=false
-SERVER_LOG_LEVEL=INFO
-SERVER_TRANSPORT=auto  # auto, stdio, sse
+```toml
+[app]
+# Application configuration
+name = "database-mcp-server"
+version = "1.0.0"
 
-# Security Settings
-MCP_READONLY_MODE=false
-MCP_ENABLE_RATE_LIMITING=true
-MCP_MAX_QUERIES_PER_MINUTE=100
-MCP_MAX_QUERY_LENGTH=50000
-MCP_ALLOWED_QUERY_TYPES=SELECT,INSERT,UPDATE,DELETE,SHOW,DESCRIBE,EXPLAIN
+[database]
+# Database connection configuration
+host = "localhost"
+port = 3306
+user = ""
+password = ""
+database = ""  # Empty = connect without default database
+charset = "utf8mb4"
+use_ssl = false
 
-# Monitoring & Logging
-SERVER_ENABLE_HEALTH_CHECKS=true
-SERVER_ENABLE_METRICS=true
-SERVER_METRICS_RETENTION_HOURS=24
-SERVER_LOG_SQL_QUERIES=true
+# Connection pool settings
+pool_size = 10
+pool_recycle = 3600
+query_timeout = 30
+max_query_length = 1048576  # 1MB
+max_rows_limit = 1000
 
-# Schema Introspection
-MCP_ENABLE_SCHEMA_INTROSPECTION=true
-MCP_ENABLE_QUERY_ANALYSIS=true
+[server]
+# Server configuration
+host = "localhost"
+port = 8080
+transport_mode = "stdio"  # Options: stdio, sse, streamable-http
+debug = false
+
+# Logging configuration
+log_level = "INFO"
+log_file = "logs/database_mcp.log"
+log_destination = "file"  # file, stderr, stdout, both (auto-set to file for stdio)
+log_format = "json"  # json or text
+log_include_timestamp = true
+log_include_trace_id = true
+log_max_file_size = "10MB"
+log_backup_count = 5
+
+[mcp]
+# MCP server configuration
+server_name = "database-mcp"
+readonly_mode = false
+tool_mode = true
+enable_rate_limiting = true
+max_queries_per_minute = 60
+
+# Allowed query types (comma-separated string, case-insensitive)
+# 
+# FINE-GRAINED RULES:
+# - "DROP" - allows any DROP operation (DATABASE, TABLE, INDEX, etc.)
+# - "DROP TABLE" - allows ONLY DROP TABLE, blocks DROP DATABASE  
+# - "DROP DATABASE" - allows ONLY DROP DATABASE, blocks DROP TABLE
+# - "CREATE TABLE, ALTER TABLE, DROP TABLE" - table-level DDL only
+#
+# EXAMPLES:
+# - Read-only: "SELECT, SHOW, DESCRIBE, EXPLAIN"
+# - Safe writes: "SELECT, INSERT, UPDATE, SHOW, DESCRIBE"
+# - Safe DDL: "SELECT, CREATE TABLE, ALTER TABLE, DROP TABLE"
+# - Full access: "SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, DROP"
+
+allowed_query_types = "SELECT, SHOW, DESCRIBE, EXPLAIN, UPDATE, INSERT, DELETE, CREATE, ALTER, DROP"
+
+[security]
+# Security configuration
+enable_sql_analysis = true
+block_dangerous_queries = true
+max_rows_returned = 10000
 ```
 
-### Advanced Configuration Options
+**`database/environment/dev.toml`** (Development overrides):
+
+```toml
+# Database MCP Server - Development Environment Overrides
+# These settings override default.toml for development
+
+[database]
+# Smaller pool for dev
+pool_size = 5
+
+# Longer timeout for debugging
+query_timeout = 60
+
+# Dev database connection (no env vars needed for local development)
+host = "localhost"
+user = "root"
+password = "root"
+database = ""  # Empty = no default database, can connect to any
+
+[server]
+# Logging configuration
+log_level = "ERROR"
+
+# Transport mode for development
+transport_mode = "stdio"  # or "sse" or "streamable-http"
+
+[mcp]
+# Override allowed_query_types for development (comma-separated string)
+# 
+# EXAMPLES - Uncomment to use:
+
+# Example 1: Read-only (safe for dev testing)
+# allowed_query_types = "SELECT, SHOW, DESCRIBE, EXPLAIN"
+
+# Example 2: Safe writes (no DDL)
+# allowed_query_types = "SELECT, INSERT, UPDATE, SHOW, DESCRIBE"
+
+# Example 3: Fine-grained DDL (table operations only, blocks DROP DATABASE)
+# allowed_query_types = "SELECT, INSERT, UPDATE, DELETE, CREATE TABLE, ALTER TABLE, DROP TABLE"
+
+# Example 4: Very restricted (schema inspection only)
+allowed_query_types = "SHOW, DESCRIBE"
+
+[security]
+# More rows for development/testing
+max_rows_returned = 10000
+```
+
+### Environment Variable Interpolation
+
+You can use environment variables in TOML files:
+
+```toml
+[database]
+host = "${DB_HOST}"              # ${VAR} syntax
+password = "$DB_PASSWORD"        # $VAR syntax
+user = "${DB_USER:root}"         # With default value
+```
+
+### Configuration Access in Code
 
 ```python
-# database/config.py provides extensive customization:
-# - SSL/TLS configuration with certificate validation
-# - Connection pool tuning and health checks
-# - Rate limiting and security policies
-# - Monitoring and metrics collection settings
-# - Cross-validation rules and dependency checks
+from database.config import Config
+
+# Initialize (loads and merges TOML files)
+config = Config()
+
+# Access configuration
+print(config.database.host)
+print(config.server.transport_mode)
+print(config.mcp.get_allowed_query_types_list())  # Parses comma-separated string
+
+# Get database connection string
+print(config.get_database_dsn(mask_password=True))
+
+# Get connection parameters for aiomysql
+params = config.get_connection_params()
+```
+
+## 🔒 Security Features
+
+### Query Validation Before Execution
+
+The database server **validates all queries before sending them to MySQL**, providing a security layer that blocks dangerous operations:
+
+**Key Features:**
+- ✅ **Pre-execution validation**: Queries are analyzed before reaching the database
+- ✅ **Fine-grained whitelisting**: Support for operation-specific rules (e.g., `DROP TABLE` allowed, `DROP DATABASE` blocked)
+- ✅ **SQL injection detection**: Pattern-based detection of injection attempts
+- ✅ **Risk assessment**: Queries are rated (low/medium/high/critical risk)
+- ✅ **Threat logging**: All blocked queries are logged with threat details
+
+**Configuration Example:**
+
+```toml
+[mcp]
+# Only allow schema inspection (read-only)
+allowed_query_types = "SHOW, DESCRIBE"
+
+# Allow safe DDL (table operations only)
+# allowed_query_types = "SELECT, CREATE TABLE, ALTER TABLE, DROP TABLE"
+
+# Note: "DROP TABLE" allows ONLY table drops, "DROP DATABASE" is blocked
+```
+
+**Security Validation Flow:**
+
+```
+1. User sends query → 2. Security validation → 3. Execute if safe
+                                ↓
+                         Block if dangerous
+                                ↓
+                    Return SECURITY_VIOLATION error
+```
+
+**Example Blocked Query:**
+
+```json
+{
+  "success": false,
+  "error": "Query blocked by security validation",
+  "error_code": "SECURITY_VIOLATION",
+  "threats": [{
+    "type": "dangerous_operation",
+    "description": "High-risk keyword detected: DROP DATABASE",
+    "severity": "high"
+  }],
+  "risk_level": "critical"
+}
+```
+
+### Fine-Grained Query Control
+
+The `allowed_query_types` configuration supports fine-grained control:
+
+```toml
+# Allow ANY drop operation
+allowed_query_types = "SELECT, DROP"
+
+# Allow ONLY table drops (database drops blocked)
+allowed_query_types = "SELECT, DROP TABLE"
+
+# Allow ONLY database drops (table drops blocked)
+allowed_query_types = "SELECT, DROP DATABASE"
+
+# Table-level DDL only
+allowed_query_types = "SELECT, CREATE TABLE, ALTER TABLE, DROP TABLE"
 ```
 
 ## 🚦 Usage

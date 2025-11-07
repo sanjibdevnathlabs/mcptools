@@ -1,0 +1,6 @@
+# Calculator MCP Server - Production Environment Overrides
+# These settings override default.toml for production
+
+# Currently using all defaults from default.toml
+# Add production-specific overrides here if needed
+

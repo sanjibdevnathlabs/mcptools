@@ -1,0 +1,12 @@
+# Calculator MCP Server - Default Configuration
+# This file contains base configuration that applies to all environments
+
+[app]
+name = "calculator"
+environment = "$APP_ENV"
+version = "1.0.0"
+
+[server]
+# Server configuration
+transport_mode = "stdio"  # Options: stdio, sse, streamable-http
+
