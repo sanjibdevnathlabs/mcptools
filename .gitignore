@@ -37,3 +37,8 @@ dmypy.json
 logs/
 *.log
 .playwright-mcp/
+
+# Test coverage
+.coverage
+coverage.xml
+htmlcov/
