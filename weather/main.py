@@ -17,7 +17,7 @@ from weather.config import Config
 # Initialize config
 config = Config()
 
-mcp = FastMCP(config.app.name)
+mcp = FastMCP(config.app.name, host=config.server.host, port=config.server.port)
 
 # Configure logging
 logging.basicConfig(

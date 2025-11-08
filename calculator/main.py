@@ -4,10 +4,12 @@ from mcp.server import FastMCP
 
 from calculator.config import Config
 
-# Initialize config
+# Initialize config from TOML files
+# Config system automatically interpolates ${VAR} with environment variables
 config = Config()
 
-mcp = FastMCP(config.app.name)
+# Create FastMCP server using configuration
+mcp = FastMCP(config.app.name, host=config.server.host, port=config.server.port)
 
 # DEFINE TOOLS
 

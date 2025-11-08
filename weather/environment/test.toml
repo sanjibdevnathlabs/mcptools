@@ -1,0 +1,25 @@
+# Weather MCP Server - Test Environment Configuration
+# Used during automated testing
+
+[app]
+name = "weather-mcp"
+
+[api]
+# Test API key - override with real key for E2E tests
+# Set OPENWEATHER_API_KEY env var for real API testing
+# Defaults to "test_api_key" for mock API server
+openweather_api_key = "${OPENWEATHER_API_KEY:-test_api_key}"
+
+# Test API base URL - can be overridden to point to mock server
+openweather_api_base = "${OPENWEATHER_API_BASE:-https://api.openweathermap.org/data/2.5}"
+
+[server]
+# All server settings use environment variables with defaults for safety
+# E2E tests set these before running to test different protocols and ports
+# Defaults: stdio mode on 127.0.0.1:8000
+transport_mode = "${TRANSPORT_MODE:-stdio}"
+host = "${FASTMCP_HOST:-127.0.0.1}"
+port = "${FASTMCP_PORT:-8000}"
+
+# Minimal logging for tests
+log_level = "ERROR"

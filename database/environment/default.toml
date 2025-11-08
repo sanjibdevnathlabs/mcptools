@@ -7,13 +7,12 @@ environment = "$APP_ENV"
 version = "1.0.0"
 
 [database]
-# Database connection settings
-# Use environment variables for sensitive data
-host = "$DB_HOST"
-port = 3306
-user = "$DB_USER"
-password = "$DB_PASSWORD"
-database = "$DB_NAME"
+# Database connection settings with environment variable defaults
+host = "${DB_HOST:-localhost}"
+port = "${DB_PORT:-3306}"
+user = "${DB_USER:-root}"
+password = "${DB_PASSWORD:-}"
+database = "${DB_NAME:-test}"
 charset = "utf8mb4"
 
 # Connection pool settings
@@ -25,10 +24,10 @@ query_timeout = 30  # seconds
 max_query_length = 1048576  # 1MB
 
 [server]
-# Server configuration
-host = "localhost"
-port = 8080
-transport_mode = "stdio"  # Options: stdio, sse, streamable-http
+# Server configuration with environment variable support
+transport_mode = "${TRANSPORT_MODE:-stdio}"  # Options: stdio, sse, streamable-http
+host = "${FASTMCP_HOST:-127.0.0.1}"          # Server host
+port = "${FASTMCP_PORT:-8000}"               # Server port (for HTTP-based transports)
 
 # Logging configuration
 log_level = "INFO"

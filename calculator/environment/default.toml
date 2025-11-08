@@ -7,6 +7,8 @@ environment = "$APP_ENV"
 version = "1.0.0"
 
 [server]
-# Server configuration
-transport_mode = "stdio"  # Options: stdio, sse, streamable-http
+# Server configuration with environment variable support
+transport_mode = "${TRANSPORT_MODE:-stdio}"  # Options: stdio, sse, streamable-http
+host = "${FASTMCP_HOST:-127.0.0.1}"          # Server host
+port = "${FASTMCP_PORT:-8000}"               # Server port (for HTTP-based transports)
 

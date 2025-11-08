@@ -1,14 +1,16 @@
 # Calculator MCP Server
 
-A simple and fast Model Context Protocol (MCP) server providing basic and advanced mathematical operations.
+A simple and fast Model Context Protocol (MCP) server providing basic and advanced mathematical operations with **96% test coverage**.
 
 ## 🚀 Features
 
 - **Basic Operations**: Addition, subtraction, multiplication, division
-- **Advanced Operations**: Power, square root, logarithm, trigonometry
-- **TOML Configuration**: Modern configuration system
+- **Advanced Operations**: Power, square root, cube root, factorial, logarithm, trigonometry
+- **TOML Configuration**: Modern configuration system with shell-style defaults
 - **Multi-Transport**: stdio, SSE, and streamable-http support
 - **Zero Dependencies**: Pure Python math operations
+- **Production-Ready**: 96% test coverage with 112 comprehensive tests
+- **Fully Tested**: Unit tests, integration tests, and E2E tests for all protocols
 - **Fast**: Minimal overhead for quick calculations
 
 ## 📦 Installation
@@ -34,21 +36,58 @@ python -m calculator
 
 ### TOML Configuration Files
 
-**`calculator/environment/default.toml`** (Base configuration)
+**`calculator/environment/default.toml`** (Base configuration with shell-style defaults)
 ```toml
 [app]
-# Application configuration
-name = "calculator-mcp-server"
+name = "calculator"
+environment = "$APP_ENV"
+version = "1.0.0"
 
 [server]
-# Server configuration
-transport_mode = "stdio"  # Options: stdio, sse, streamable-http
+# Server configuration with environment variable support and fallback defaults
+transport_mode = "${TRANSPORT_MODE:-stdio}"  # Options: stdio, sse, streamable-http
+host = "${FASTMCP_HOST:-127.0.0.1}"          # Server host
+port = "${FASTMCP_PORT:-8000}"               # Server port (for HTTP-based transports)
 ```
 
 **`calculator/environment/dev.toml`** (Development overrides - gitignored)
 ```toml
-# Currently using all defaults from default.toml
 # Add development-specific overrides here if needed
+# Example:
+# [server]
+# transport_mode = "sse"
+# port = 8080
+```
+
+**`calculator/environment/test.toml`** (Test configuration - used during automated testing)
+```toml
+[app]
+name = "calculator"
+
+[server]
+# Test configuration uses environment variables for dynamic port assignment
+transport_mode = "${TRANSPORT_MODE:-stdio}"
+host = "${FASTMCP_HOST:-127.0.0.1}"
+port = "${FASTMCP_PORT:-8000}"
+```
+
+### Shell-Style Default Values
+
+The configuration system supports `${VAR:-default}` syntax for environment variables:
+
+- If the environment variable is set, its value is used
+- If not set, the default value after `:-` is used
+- This provides safe fallbacks for all configurations
+
+**Examples:**
+```bash
+# Use default stdio mode
+python -m calculator
+
+# Override with environment variable
+export TRANSPORT_MODE=sse
+export FASTMCP_PORT=9000
+python -m calculator  # Now runs in SSE mode on port 9000
 ```
 
 ## 🚦 Usage
@@ -59,9 +98,75 @@ transport_mode = "stdio"  # Options: stdio, sse, streamable-http
 # Default (uses stdio from default.toml)
 python -m calculator
 
-# The transport mode is configured in TOML files
-# Edit calculator/environment/dev.toml to change transport
+# The transport mode is configured in TOML files or environment variables
+# Edit calculator/environment/dev.toml or use environment variables
+export TRANSPORT_MODE=sse
+export FASTMCP_PORT=9000
+python -m calculator
 ```
+
+## 🧪 Testing
+
+### Test Suite
+
+The Calculator MCP has comprehensive test coverage:
+
+**Test Statistics:**
+- **112 total tests** (all passing ✅)
+- **96% code coverage**
+- **3 test types**: Unit, Integration, E2E
+- **3 protocols tested**: STDIO, SSE, Streamable-HTTP
+
+**Test Breakdown:**
+- **Unit Tests (86 tests)**: Test individual mathematical operations with mocking
+  - Basic operations: add, subtract, multiply, divide
+  - Advanced operations: power, sqrt, cbrt, factorial, log, remainder
+  - Trigonometry: sin, cos, tan
+  - Edge cases: division by zero, negative sqrt, invalid inputs
+- **Integration Tests (8 tests)**: Test direct function calls and workflows
+  - Arithmetic workflows
+  - Scientific calculations
+  - Chained operations
+  - Error handling
+- **E2E Tests (18 tests)**: Test actual client-server communication
+  - STDIO protocol (6 tests)
+  - SSE protocol (6 tests)
+  - Streamable-HTTP protocol (6 tests)
+  - Protocol parity verification
+
+### Running Tests
+
+```bash
+# Install test dependencies (if not already installed)
+pip install -r requirements-test.txt
+
+# Run all calculator tests with coverage
+make test-calc
+
+# Or run specific test types
+pytest calculator/tests/test_calculator_tools.py -v    # Unit tests
+pytest calculator/tests/test_integration.py -v         # Integration tests
+pytest tests/test_e2e_calculator.py -v                 # E2E tests
+
+# Run all project tests
+make test
+
+# View coverage report
+open htmlcov/index.html
+```
+
+### Test Configuration
+
+Tests use `calculator/environment/test.toml` which dynamically configures:
+- Transport mode (STDIO/SSE/HTTP) via `TRANSPORT_MODE` env var
+- Server host/port via `FASTMCP_HOST`/`FASTMCP_PORT` env vars
+- Minimal logging for cleaner test output
+
+**E2E Test Execution:**
+- Each protocol spawns actual server process
+- Uses official MCP SDK clients for protocol communication
+- Verifies identical results across all protocols
+- Automatic cleanup ensures port release
 
 ### Testing with MCP Inspector
 

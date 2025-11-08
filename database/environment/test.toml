@@ -1,0 +1,44 @@
+# Database MCP Server - Test Environment Configuration
+# Used during automated E2E testing
+
+[database]
+# Test database connection with environment variable defaults
+host = "${TEST_DB_HOST:-localhost}"
+port = "${TEST_DB_PORT:-3306}"
+user = "${TEST_DB_USER:-test_user}"
+password = "${TEST_DB_PASSWORD:-test_password}"
+database = "${TEST_DB_DATABASE:-test_db}"
+charset = "utf8mb4"
+
+# Smaller pool for tests
+pool_size = 2
+pool_recycle = 600
+query_timeout = 5
+
+[server]
+# All server settings use environment variables with defaults for safety
+# E2E tests set these before running to test different protocols and ports
+# Defaults: stdio mode on 127.0.0.1:8000
+transport_mode = "${TRANSPORT_MODE:-stdio}"
+host = "${FASTMCP_HOST:-127.0.0.1}"
+port = "${FASTMCP_PORT:-8000}"
+
+# Minimal logging for tests
+log_level = "ERROR"
+log_destination = "file"
+
+[mcp]
+# SAFE MODE: Readonly for tests
+readonly_mode = true
+
+# Only allow safe read operations during tests
+# This prevents accidental data modification during testing
+allowed_query_types = "SELECT, SHOW, DESCRIBE, EXPLAIN"
+
+[security]
+# Enable security validation
+enable_sql_analysis = true
+
+# Smaller limits for tests
+max_rows_returned = 100
+max_query_length = 10240  # 10KB
