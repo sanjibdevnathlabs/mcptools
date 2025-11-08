@@ -146,7 +146,7 @@ test-calc:
 
 test-weather:
 	@echo "🌤️  Testing weather only (with coverage)..."
-	pytest weather/tests/ tests/test_e2e_weather.py -v \
+	APP_ENV=test pytest weather/tests/ tests/test_e2e_weather.py -v \
 		--cov=weather --cov-report=term-missing
 
 test-db:

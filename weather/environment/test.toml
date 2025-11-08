@@ -2,13 +2,16 @@
 # Used during automated testing
 
 [app]
-name = "weather"
+name = "weather-mcp"
 
 [api]
 # Test API key - override with real key for E2E tests
 # Set OPENWEATHER_API_KEY env var for real API testing
-# Defaults to empty string (will skip API tests if not set)
-openweather_api_key = "${OPENWEATHER_API_KEY:-}"
+# Defaults to "test_api_key" for mock API server
+openweather_api_key = "${OPENWEATHER_API_KEY:-test_api_key}"
+
+# Test API base URL - can be overridden to point to mock server
+openweather_api_base = "${OPENWEATHER_API_BASE:-https://api.openweathermap.org/data/2.5}"
 
 [server]
 # All server settings use environment variables with defaults for safety

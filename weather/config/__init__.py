@@ -159,7 +159,8 @@ class Config:
 
     def _validate_config(self):
         """Validate required configuration values."""
-        if not self.api.openweather_api_key:
+        # Skip API key validation in test environment - allow empty key for mock API
+        if not self.api.openweather_api_key and os.environ.get("APP_ENV") != "test":
             raise ValueError(
                 "OpenWeather API key not set.\n"
                 "Set environment variable: export OPENWEATHER_API_KEY=your_key"
