@@ -7,15 +7,17 @@ environment = "$APP_ENV"
 version = "1.0.0"
 
 [api]
-# OpenWeather API Configuration
-openweather_api_key = "$OPENWEATHER_API_KEY"
+# OpenWeather API Configuration with environment variable support
+openweather_api_key = "${OPENWEATHER_API_KEY:-}"
 openweather_api_base = "https://api.openweathermap.org/data/2.5"
 timeout = 30
 user_agent = "weather-app/1.0"
 
 [server]
-# Server configuration
-transport_mode = "stdio"  # Options: stdio, sse, streamable-http
+# Server configuration with environment variable support
+transport_mode = "${TRANSPORT_MODE:-stdio}"  # Options: stdio, sse, streamable-http
+host = "${FASTMCP_HOST:-127.0.0.1}"          # Server host
+port = "${FASTMCP_PORT:-8000}"               # Server port (for HTTP-based transports)
 
 # Logging configuration
 log_level = "INFO"
