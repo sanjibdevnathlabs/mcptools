@@ -26,7 +26,26 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 
-@pytest_asyncio.fixture
+@pytest.fixture(scope="class")
+def event_loop():
+    """Create an event loop for the test class"""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    yield loop
+    loop.close()
+
+
+def find_free_port():
+    """Find a free port for server binding"""
+    import socket
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("", 0))
+        s.listen(1)
+        port = s.getsockname()[1]
+    return port
+
+
+@pytest_asyncio.fixture(scope="class")
 async def calculator_stdio_client():
     """Fixture for calculator MCP client using STDIO protocol"""
     server_params = StdioServerParameters(
@@ -65,9 +84,9 @@ def find_free_port():
     return port
 
 
-@pytest_asyncio.fixture
+@pytest_asyncio.fixture(scope="class")
 async def calculator_sse_server():
-    """Fixture to start calculator server in SSE mode"""
+    """Fixture to start calculator server in SSE mode (shared across test class)"""
     port = find_free_port()
     url = f"http://127.0.0.1:{port}/sse"
 
@@ -139,9 +158,9 @@ async def calculator_sse_server():
         await asyncio.sleep(0.1)
 
 
-@pytest_asyncio.fixture
+@pytest_asyncio.fixture(scope="class")
 async def calculator_http_server():
-    """Fixture to start calculator server in streamable-http mode"""
+    """Fixture to start calculator server in streamable-http mode (shared across test class)"""
     port = find_free_port()
     url = f"http://127.0.0.1:{port}/mcp"
 
@@ -213,9 +232,9 @@ async def calculator_http_server():
         await asyncio.sleep(0.1)
 
 
-@pytest_asyncio.fixture
+@pytest_asyncio.fixture(scope="class")
 async def calculator_sse_client(calculator_sse_server):
-    """Fixture for calculator MCP client using SSE protocol"""
+    """Fixture for calculator MCP client using SSE protocol (shared across test class)"""
     url = calculator_sse_server
 
     # Create SSE client context
@@ -237,9 +256,9 @@ async def calculator_sse_client(calculator_sse_server):
         await sse_ctx.__aexit__(None, None, None)
 
 
-@pytest_asyncio.fixture
+@pytest_asyncio.fixture(scope="class")
 async def calculator_http_client(calculator_http_server):
-    """Fixture for calculator MCP client using streamable-http protocol"""
+    """Fixture for calculator MCP client using streamable-http protocol (shared across test class)"""
     url = calculator_http_server
 
     # Create streamable-http client context

@@ -128,11 +128,11 @@ clean:
 # Testing Commands
 # ============================================================================
 
-# Main test command - runs all tests with coverage
+# Main test command - runs all tests with coverage (parallelized)
 test:
-	@echo "🧪 Running all tests with coverage report..."
+	@echo "🧪 Running all tests with coverage report (parallelized)..."
 	@echo ""
-	pytest -v \
+	pytest -v -n auto \
 		--cov=database --cov=weather --cov=calculator \
 		--cov-report=html --cov-report=term-missing
 	@echo ""
@@ -140,18 +140,18 @@ test:
 
 # Server-specific tests (for fast iteration during development)
 test-calc:
-	@echo "🧮 Testing calculator only (with coverage)..."
-	pytest calculator/tests/ tests/test_e2e_calculator.py -v \
+	@echo "🧮 Testing calculator only (with coverage and parallelization)..."
+	pytest calculator/tests/ tests/test_e2e_calculator.py -v -n auto \
 		--cov=calculator --cov-report=term-missing
 
 test-weather:
-	@echo "🌤️  Testing weather only (with coverage)..."
-	APP_ENV=test pytest weather/tests/ tests/test_e2e_weather.py -v \
+	@echo "🌤️  Testing weather only (with coverage and parallelization)..."
+	APP_ENV=test pytest weather/tests/ tests/test_e2e_weather.py -v -n auto \
 		--cov=weather --cov-report=term-missing
 
 test-db:
-	@echo "🗄️  Testing database only (with coverage)..."
-	pytest database/tests/ tests/test_e2e_database.py -v \
+	@echo "🗄️  Testing database only (with coverage and parallelization)..."
+	APP_ENV=test pytest database/tests/ tests/test_e2e_database.py -v -n auto \
 		--cov=database --cov-report=term-missing
 
 # ============================================================================

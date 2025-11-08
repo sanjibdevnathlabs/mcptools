@@ -32,6 +32,15 @@ from mcp.client.streamable_http import streamablehttp_client
 # ============================================================================
 
 
+@pytest.fixture(scope="class")
+def event_loop():
+    """Create an event loop for the test class"""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    yield loop
+    loop.close()
+
+
 def find_free_port() -> int:
     """Find a free port to use for server"""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -92,9 +101,9 @@ def mock_weather_api():
 # ============================================================================
 
 
-@pytest_asyncio.fixture
+@pytest_asyncio.fixture(scope="class")
 async def weather_stdio_client(mock_weather_api) -> AsyncGenerator[ClientSession, None]:
-    """Fixture for weather MCP client using STDIO protocol"""
+    """Fixture for weather MCP client using STDIO protocol (shared across test class)"""
     # MCP SDK's stdio_client doesn't inherit os.environ with env=None
     # Must explicitly pass environment dict
     env = os.environ.copy()
@@ -201,9 +210,9 @@ class TestWeatherSTDIO:
 # ============================================================================
 
 
-@pytest_asyncio.fixture
+@pytest_asyncio.fixture(scope="class")
 async def weather_sse_server(mock_weather_api):
-    """Fixture to start weather server in SSE mode with mock API"""
+    """Fixture to start weather server in SSE mode with mock API (shared across test class)"""
     port = find_free_port()
     url = f"http://127.0.0.1:{port}/sse"
 
@@ -275,9 +284,9 @@ async def weather_sse_server(mock_weather_api):
         await asyncio.sleep(0.1)
 
 
-@pytest_asyncio.fixture
+@pytest_asyncio.fixture(scope="class")
 async def weather_sse_client(weather_sse_server) -> AsyncGenerator[ClientSession, None]:
-    """Fixture for weather MCP client using SSE protocol"""
+    """Fixture for weather MCP client using SSE protocol (shared across test class)"""
     url = weather_sse_server
 
     # Create SSE client context
@@ -370,9 +379,9 @@ class TestWeatherSSE:
 # ============================================================================
 
 
-@pytest_asyncio.fixture
+@pytest_asyncio.fixture(scope="class")
 async def weather_http_server(mock_weather_api):
-    """Fixture to start weather server in HTTP mode with mock API"""
+    """Fixture to start weather server in HTTP mode with mock API (shared across test class)"""
     port = find_free_port()
     url = f"http://127.0.0.1:{port}/mcp"
 
@@ -444,9 +453,9 @@ async def weather_http_server(mock_weather_api):
         await asyncio.sleep(0.1)
 
 
-@pytest_asyncio.fixture
+@pytest_asyncio.fixture(scope="class")
 async def weather_http_client(weather_http_server) -> AsyncGenerator[ClientSession, None]:
-    """Fixture for weather MCP client using streamable-http protocol"""
+    """Fixture for weather MCP client using streamable-http protocol (shared across test class)"""
     url = weather_http_server
 
     # Create streamable-http client context
