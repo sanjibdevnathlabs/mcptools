@@ -42,3 +42,6 @@ logs/
 .coverage
 coverage.xml
 htmlcov/
+
+# Memory bank (temporary session tracking - not for version control)
+memory_bank/

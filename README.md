@@ -107,19 +107,25 @@ python -m weather  # Uses config from environment/default.toml
 
 ## 🧮 Calculator MCP Server (`calculator/`)
 
-A simple MCP server providing basic and advanced mathematical operations.
+A simple MCP server providing basic and advanced mathematical operations with **96% test coverage**.
 
 **Features:**
 - ✅ Basic operations: add, subtract, multiply, divide
 - ✅ Advanced operations: power, square root, logarithm, trigonometry
-- ✅ TOML-based configuration
+- ✅ TOML-based configuration with shell-style defaults
 - ✅ Multi-transport support: stdio, SSE, streamable-http
-- ✅ Minimal configuration for quick testing
+- ✅ Comprehensive test suite: 112 tests (unit, integration, E2E)
+- ✅ 96% code coverage
+- ✅ Production-ready with full E2E testing across all protocols
 
 **Quick Start:**
 ```bash
 # Run the server
 python -m calculator
+
+# Run tests
+make test-calc          # Run all calculator tests with coverage
+make test              # Run all project tests
 
 # Test with MCP Inspector
 # Transport: STDIO
@@ -128,8 +134,10 @@ python -m calculator
 ```
 
 **Configuration:**
-- `calculator/environment/default.toml` - Base configuration
+- `calculator/environment/default.toml` - Base configuration with shell-style defaults
 - `calculator/environment/dev.toml` - Development overrides (gitignored)
+- `calculator/environment/test.toml` - Test environment configuration
+- Supports `${VAR:-default}` syntax for environment variable fallbacks
 
 ---
 
@@ -175,13 +183,18 @@ transport_mode = "stdio"
 allowed_query_types = "SHOW, DESCRIBE"  # Comma-separated
 ```
 
-**Environment Variable Interpolation:**
+**Environment Variable Interpolation with Shell-Style Defaults:**
 
 ```toml
-# Use $VAR or ${VAR} for environment variables
+# Use ${VAR:-default} for environment variables with fallback defaults
 [database]
-host = "${DB_HOST}"
-password = "$DB_PASSWORD"
+host = "${DB_HOST:-localhost}"
+password = "${DB_PASSWORD:-}"
+
+[server]
+transport_mode = "${TRANSPORT_MODE:-stdio}"
+host = "${FASTMCP_HOST:-127.0.0.1}"
+port = "${FASTMCP_PORT:-8000}"
 ```
 
 ### Running Servers
@@ -262,11 +275,81 @@ print(config.mcp.allowed_query_types)
 
 ---
 
+## 🧪 Testing
+
+### Test Suite Overview
+
+The project includes comprehensive testing:
+
+**Calculator MCP: ✅ Production-Ready (96% coverage)**
+- 112 tests (unit + integration + E2E)
+- E2E tests for all 3 protocols (STDIO, SSE, Streamable-HTTP)
+- Validated across all transport modes
+
+**Weather MCP: 🚧 In Progress**
+- Unit tests planned
+- E2E tests planned
+
+**Database MCP: 🚧 In Progress**
+- Unit tests planned
+- E2E tests planned
+
+### Running Tests
+
+```bash
+# Install test dependencies
+pip install -r requirements-test.txt
+
+# Run all tests with coverage
+make test
+
+# Run server-specific tests (fast iteration)
+make test-calc          # Calculator only
+make test-weather       # Weather only (when implemented)
+make test-db            # Database only (when implemented)
+
+# Run code quality checks
+make check              # Format + lint + type-check
+make fix                # Auto-fix all issues
+```
+
+### Makefile Commands
+
+**Essential Commands (simplified from 22 → 12):**
+
+```bash
+make help               # Show all available commands
+make install            # Install all dependencies
+make check              # Run all quality checks
+make fix                # Auto-fix code issues
+make test               # Run all tests with coverage
+make test-calc          # Test calculator (fast)
+make test-weather       # Test weather (fast)
+make test-db            # Test database (fast)
+make clean              # Clean build artifacts
+make run-database       # Run database server
+make run-weather        # Run weather server
+make run-calculator     # Run calculator server
+```
+
+### Test Coverage
+
+```bash
+# After running tests, view coverage report
+open htmlcov/index.html  # Opens in browser
+
+# Coverage reports are also generated in terminal
+make test                # Shows coverage in terminal + HTML
+```
+
+---
+
 ## 📋 Requirements
 
 - **Python 3.11+** (3.10+ with `tomli` for TOML parsing)
 - **Virtual environment** (strongly recommended)
 - **FastMCP** framework
+- **pytest** and plugins for testing (see `requirements-test.txt`)
 - Server-specific dependencies (see `requirements.txt`)
 
 ## 🤝 Contributing
