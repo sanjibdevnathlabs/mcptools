@@ -292,15 +292,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Pull test image
-        env:
-          BASE_TAG: ${{ needs.compute-tags.outputs.base_tag }}
-          TEST_IMAGE: sanjibdevnath/mcp-${{ matrix.mcp }}-test:${{ needs.compute-tags.outputs.base_tag }}
-        run: |
-          echo "🐳 Pulling test image: $TEST_IMAGE"
-          docker pull $TEST_IMAGE
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: |
+            requirements.txt
+            requirements-test.txt
       
-      - name: Start MySQL (if testing database)
+      - name: Install dependencies
+        run: make install
+      
+      - name: Start MySQL (only for database MCP)
         if: matrix.mcp == 'database'
         run: |
           docker run -d \
@@ -311,57 +314,36 @@ jobs:
             mysql:8.0
           
           # Wait for MySQL
-          echo "⏳ Waiting for MySQL..."
+          echo "⏳ Waiting for MySQL to be ready..."
           for i in {1..30}; do
             if docker exec mysql-test mysqladmin ping -h localhost -ptest_password --silent 2>/dev/null; then
-              echo "✅ MySQL ready"
+              echo "✅ MySQL is ready"
               break
             fi
             sleep 2
           done
           
           # Initialize test database
-          docker exec mysql-test mysql -uroot -ptest_password < database/tests/fixtures/init_test_db.sql 2>&1 | grep -v "Warning" || true
+          mysql -h 127.0.0.1 -uroot -ptest_password < database/tests/fixtures/init_test_db.sql 2>&1 | grep -v "Warning" || true
       
-      - name: Run tests in test container
+      - name: Run tests
         env:
-          BASE_TAG: ${{ needs.compute-tags.outputs.base_tag }}
-          TEST_IMAGE: sanjibdevnath/mcp-${{ matrix.mcp }}-test:${{ needs.compute-tags.outputs.base_tag }}
           APP_ENV: test
           DB_HOST: 127.0.0.1
           DB_USER: root
           DB_PASSWORD: test_password
           DB_DATABASE: test_mcp_db
         run: |
-          # Run make test command inside test container (code already baked in)
-          # Don't use --rm so we can extract coverage afterward
+          # Run make test command directly on runner (like ui-config-service)
           case "${{ matrix.mcp }}" in
             calculator)
-              docker run \
-                --name test-runner-${{ matrix.mcp }} \
-                -e APP_ENV=test \
-                $TEST_IMAGE \
-                make test-calc
+              make test-calc
               ;;
             weather)
-              docker run \
-                --name test-runner-${{ matrix.mcp }} \
-                --network host \
-                -e APP_ENV=test \
-                $TEST_IMAGE \
-                make test-weather
+              make test-weather
               ;;
             database)
-              docker run \
-                --name test-runner-${{ matrix.mcp }} \
-                --network host \
-                -e APP_ENV=test \
-                -e DB_HOST=127.0.0.1 \
-                -e DB_USER=root \
-                -e DB_PASSWORD=test_password \
-                -e DB_DATABASE=test_mcp_db \
-                $TEST_IMAGE \
-                make test-db
+              make test-db
               ;;
             *)
               echo "⚠️ Unknown MCP: ${{ matrix.mcp }}"
@@ -369,27 +351,11 @@ jobs:
               ;;
           esac
       
-      - name: Extract coverage from container
-        if: always()
-        run: |
-          docker cp test-runner-${{ matrix.mcp }}:/app/coverage.xml ./coverage.xml || true
-          docker rm test-runner-${{ matrix.mcp }} || true
-      
       - name: Stop MySQL (if running)
         if: always() && matrix.mcp == 'database'
         run: |
           docker stop mysql-test || true
           docker rm mysql-test || true
-      
-      - name: Upload coverage
-        uses: codecov/codecov-action@v4
-        if: always()
-        with:
-          file: ./coverage.xml
-          flags: ${{ matrix.mcp }}
-          name: ${{ matrix.mcp }}-coverage
-          token: ${{ secrets.CODECOV_TOKEN }}
-        continue-on-error: true
   
   # ===========================================================================
   # Stage 8: Security Scans (Master only)
