@@ -464,20 +464,24 @@ jobs:
             echo "✅ Security scan passed"
           fi
           
-          # Check builds (auto-scales with matrix)
-          if [[ "${{ needs.build-mcps.result }}" != "success" ]]; then
+          # Check builds (auto-scales with matrix, can be skipped on PRs with no base changes)
+          if [[ "${{ needs.build-mcps.result }}" == "success" ]]; then
+            echo "✅ Docker builds passed"
+          elif [[ "${{ needs.build-mcps.result }}" == "skipped" ]]; then
+            echo "⏭️  Docker builds skipped (no base changes or PR)"
+          else
             echo "❌ Docker builds failed"
             FAILED=1
-          else
-            echo "✅ Docker builds passed"
           fi
           
-          # Check non-database tests (auto-scales with matrix)
-          if [[ "${{ needs.test-mcps.result }}" != "success" ]]; then
+          # Check non-database tests (auto-scales with matrix, can be skipped if no file changes)
+          if [[ "${{ needs.test-mcps.result }}" == "success" ]]; then
+            echo "✅ MCP tests passed"
+          elif [[ "${{ needs.test-mcps.result }}" == "skipped" ]]; then
+            echo "⏭️  MCP tests skipped (no relevant file changes)"
+          else
             echo "❌ MCP tests failed (calculator, weather, etc.)"
             FAILED=1
-          else
-            echo "✅ MCP tests passed"
           fi
           
           # Check database tests (may be skipped if database MCP doesn't exist)
