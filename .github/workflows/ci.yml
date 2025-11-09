@@ -423,39 +423,77 @@ jobs:
   # ===========================================================================
   # Stage 9: Required Checks Summary (for branch protection)
   # ===========================================================================
+  # This job automatically scales with new MCPs - no manual updates needed!
+  # Matrix jobs (quality-checks, build-mcps, test-mcps) auto-expand via detect-mcps
   required-checks:
     name: ✅ All Required Checks Passed
-    needs: [quality-checks, security, test-mcps, test-database, build-mcps]
+    needs: 
+      - detect-mcps        # Ensures MCP discovery completed
+      - quality-checks     # Waits for ALL quality check matrix instances
+      - security           # Single security scan
+      - build-mcps         # Waits for ALL build matrix instances
+      - test-mcps          # Waits for ALL non-database test matrix instances
+      - test-database      # Database tests (conditional on database MCP existing)
     if: always()
     runs-on: ubuntu-latest
     
     steps:
       - name: Check all required jobs
         run: |
-          # Check if all required jobs succeeded
+          echo "📊 Checking all required CI jobs..."
+          echo ""
+          
+          # Matrix jobs: quality-checks, build-mcps, test-mcps auto-scale with detect-mcps
+          # No manual updates needed when adding new MCPs!
+          
+          FAILED=0
+          
+          # Check quality checks (auto-scales with matrix)
           if [[ "${{ needs.quality-checks.result }}" != "success" ]]; then
-            echo "❌ Quality checks failed"
-            exit 1
+            echo "❌ Quality checks failed (black + ruff + mypy)"
+            FAILED=1
+          else
+            echo "✅ Quality checks passed"
           fi
           
+          # Check security scan
           if [[ "${{ needs.security.result }}" != "success" ]]; then
-            echo "❌ Security scan failed"
-            exit 1
+            echo "❌ Security scan failed (bandit + safety + pip-audit)"
+            FAILED=1
+          else
+            echo "✅ Security scan passed"
           fi
           
-          if [[ "${{ needs.test-mcps.result }}" != "success" ]]; then
-            echo "❌ MCP tests failed"
-            exit 1
-          fi
-          
-          if [[ "${{ needs.test-database.result }}" != "success" ]]; then
-            echo "❌ Database tests failed"
-            exit 1
-          fi
-          
+          # Check builds (auto-scales with matrix)
           if [[ "${{ needs.build-mcps.result }}" != "success" ]]; then
-            echo "❌ Build failed"
+            echo "❌ Docker builds failed"
+            FAILED=1
+          else
+            echo "✅ Docker builds passed"
+          fi
+          
+          # Check non-database tests (auto-scales with matrix)
+          if [[ "${{ needs.test-mcps.result }}" != "success" ]]; then
+            echo "❌ MCP tests failed (calculator, weather, etc.)"
+            FAILED=1
+          else
+            echo "✅ MCP tests passed"
+          fi
+          
+          # Check database tests (may be skipped if database MCP doesn't exist)
+          if [[ "${{ needs.test-database.result }}" == "success" ]]; then
+            echo "✅ Database tests passed"
+          elif [[ "${{ needs.test-database.result }}" == "skipped" ]]; then
+            echo "⏭️  Database tests skipped (no database MCP)"
+          else
+            echo "❌ Database tests failed"
+            FAILED=1
+          fi
+          
+          echo ""
+          if [ $FAILED -eq 1 ]; then
+            echo "❌ Some required checks failed!"
             exit 1
           fi
           
-          echo "✅ All required checks passed!"
+          echo "✅ All required checks passed! PR is ready to merge."
