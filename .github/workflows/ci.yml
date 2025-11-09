@@ -97,7 +97,10 @@ jobs:
   build-base:
     name: 🐳 Build Base Image
     needs: [detect-changes, compute-tags]
-    if: needs.detect-changes.outputs.base_changed == 'true' || github.event_name == 'push'
+    if: |
+      needs.detect-changes.outputs.base_changed == 'true' || 
+      github.event_name == 'push' ||
+      contains(github.event.pull_request.labels.*.name, 'force-build')
     runs-on: ubuntu-latest
     
     steps:
@@ -451,6 +454,15 @@ jobs:
           # Initialize summary
           echo "# 🎯 CI/CD Pipeline Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Check if force-build label is present
+          if ${{ contains(github.event.pull_request.labels.*.name, 'force-build') }}; then
+            echo "> **🚀 Force Build Active**" >> $GITHUB_STEP_SUMMARY
+            echo "> Docker builds are running regardless of file changes." >> $GITHUB_STEP_SUMMARY
+            echo "> Remove the \`force-build\` label to revert to automatic detection." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+          
           echo "| Check | Status | Details |" >> $GITHUB_STEP_SUMMARY
           echo "|-------|--------|---------|" >> $GITHUB_STEP_SUMMARY
           
