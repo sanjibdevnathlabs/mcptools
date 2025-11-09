@@ -208,7 +208,7 @@ jobs:
   # ===========================================================================
   test-mcps:
     name: 🧪 Test ${{ matrix.mcp }}
-    needs: [detect-mcps, build-base, quality-checks, security]
+    needs: [detect-mcps, compute-tags, build-base, quality-checks, security]
     runs-on: ubuntu-latest
     
     strategy:
@@ -218,6 +218,20 @@ jobs:
     
     steps:
       - uses: actions/checkout@v4
+      
+      - name: Pull base image and build test image
+        env:
+          BASE_TAG: ${{ needs.compute-tags.outputs.base_tag }}
+        run: |
+          echo "🐳 Pulling base image: ${{ env.BASE_IMAGE }}:$BASE_TAG"
+          docker pull ${{ env.BASE_IMAGE }}:$BASE_TAG
+          
+          echo "🔨 Building test image for ${{ matrix.mcp }}"
+          docker build \
+            -f ${{ matrix.mcp }}/docker/Dockerfile.test \
+            --build-arg BASE_TAG=$BASE_TAG \
+            -t mcp-${{ matrix.mcp }}-test:ci \
+            .
       
       - name: Start MySQL server (if testing database)
         if: matrix.mcp == 'database'
@@ -241,33 +255,15 @@ jobs:
             sleep 2
           done
       
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: 'pip'
-          cache-dependency-path: |
-            requirements.txt
-            requirements-test.txt
-      
-      - name: Install dependencies
-        run: make install
-      
-      - name: Cache pytest
-        uses: actions/cache@v4
-        with:
-          path: .pytest_cache
-          key: pytest-${{ runner.os }}-${{ matrix.mcp }}-${{ hashFiles(format('{0}/**/*.py', matrix.mcp)) }}
-          restore-keys: |
-            pytest-${{ runner.os }}-${{ matrix.mcp }}-
-            pytest-${{ runner.os }}-
-      
       - name: Start mock weather server (if testing weather)
         if: matrix.mcp == 'weather'
         run: |
-          # Start mock weather server in background
-          python -m weather.mock_weather_api &
-          MOCK_SERVER_PID=$!
-          echo "MOCK_SERVER_PID=$MOCK_SERVER_PID" >> $GITHUB_ENV
+          # Start mock weather server using test image
+          docker run -d \
+            --name mock-weather \
+            --network host \
+            mcp-weather-test:ci \
+            python -m weather.mock_weather_api
           
           # Wait for server to be ready
           for i in {1..30}; do
@@ -288,16 +284,31 @@ jobs:
           DB_PASSWORD: test_password
           DB_DATABASE: test_mcp_db
         run: |
-          # Use Makefile commands for consistency with local development
+          # Run tests using test Docker images (includes quality checks + tests)
           case "${{ matrix.mcp }}" in
             calculator)
-              make test-calc
+              docker run --rm \
+                --network host \
+                -e APP_ENV=test \
+                mcp-calculator-test:ci
               ;;
             weather)
-              make test-weather
+              docker run --rm \
+                --network host \
+                -e APP_ENV=test \
+                mcp-weather-test:ci
               ;;
             database)
-              make test-db
+              # Initialize database first
+              docker exec mysql-test mysql -uroot -ptest_password < database/tests/fixtures/init_test_db.sql 2>&1 | grep -v "Warning" || true
+              
+              docker run --rm \
+                --network host \
+                -e APP_ENV=test \
+                -e DB_HOST=127.0.0.1 \
+                -e DB_USER=root \
+                -e DB_PASSWORD=test_password \
+                mcp-database-test:ci
               ;;
             *)
               echo "⚠️ Unknown MCP: ${{ matrix.mcp }}"
@@ -305,12 +316,18 @@ jobs:
               ;;
           esac
       
+      - name: Copy coverage from container (if needed)
+        run: |
+          # Coverage files are generated inside containers, copy them out
+          docker create --name temp-coverage mcp-${{ matrix.mcp }}-test:ci
+          docker cp temp-coverage:/app/coverage.xml ./coverage.xml || true
+          docker rm temp-coverage || true
+      
       - name: Stop mock weather server (if running)
         if: always() && matrix.mcp == 'weather'
         run: |
-          if [ -n "$MOCK_SERVER_PID" ]; then
-            kill $MOCK_SERVER_PID || true
-          fi
+          docker stop mock-weather || true
+          docker rm mock-weather || true
       
       - name: Stop MySQL server (if running)
         if: always() && matrix.mcp == 'database'
@@ -383,7 +400,7 @@ jobs:
   scan-images:
     name: 🔒 Scan ${{ matrix.mcp }} Image
     needs: [detect-mcps, build-mcps]
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     
     strategy:
