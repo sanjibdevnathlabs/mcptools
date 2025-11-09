@@ -52,7 +52,7 @@ jobs:
             "https://hub.docker.com/v2/repositories/${DOCKERHUB_USERNAME}/mcp-base/tags/${TAG}/" \
             || echo "⚠️ Base image tag not found (may not have been pushed)"
       
-      - name: Delete MCP image tags
+      - name: Delete MCP production and test image tags
         env:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -64,13 +64,19 @@ jobs:
             -d "{\"username\": \"$DOCKERHUB_USERNAME\", \"password\": \"$DOCKERHUB_TOKEN\"}" \
             https://hub.docker.com/v2/users/login/ | jq -r .token)
           
-          # Delete each MCP image tag
+          # Delete each MCP production and test image tag
           echo "$MCPS" | jq -r '.[]' | while read mcp; do
-            echo "🗑️ Deleting mcp-$mcp tag: $TAG"
+            echo "🗑️ Deleting mcp-$mcp production tag: $TAG"
             curl -X DELETE \
               -H "Authorization: JWT $TOKEN" \
               "https://hub.docker.com/v2/repositories/${DOCKERHUB_USERNAME}/mcp-${mcp}/tags/${TAG}/" \
-              || echo "⚠️ MCP $mcp tag not found (may not have been pushed)"
+              || echo "⚠️ MCP $mcp production tag not found"
+            
+            echo "🗑️ Deleting mcp-$mcp test tag: $TAG"
+            curl -X DELETE \
+              -H "Authorization: JWT $TOKEN" \
+              "https://hub.docker.com/v2/repositories/${DOCKERHUB_USERNAME}/mcp-${mcp}-test/tags/${TAG}/" \
+              || echo "⚠️ MCP $mcp test tag not found"
           done
       
       - name: Cleanup summary
@@ -81,5 +87,6 @@ jobs:
           echo "  - sanjibdevnath/mcp-base:${{ steps.compute.outputs.branch_tag }}"
           echo "${{ steps.discover.outputs.mcps }}" | jq -r '.[]' | while read mcp; do
             echo "  - sanjibdevnath/mcp-$mcp:${{ steps.compute.outputs.branch_tag }}"
+            echo "  - sanjibdevnath/mcp-$mcp-test:${{ steps.compute.outputs.branch_tag }}"
           done
 

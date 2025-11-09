@@ -204,10 +204,10 @@ jobs:
         continue-on-error: true
   
   # ===========================================================================
-  # Stage 6: Build MCP Images (Matrix Strategy) - Build on PRs and Master
+  # Stage 6: Build MCP Production Images (Matrix Strategy) - Build on PRs and Master
   # ===========================================================================
   build-mcps:
-    name: 🐳 Build ${{ matrix.mcp }} Image
+    name: 🐳 Build ${{ matrix.mcp }} Production Image
     needs: [detect-mcps, compute-tags, build-base]
     runs-on: ubuntu-latest
     
@@ -228,7 +228,7 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       
-      - name: Docker meta
+      - name: Docker meta for production image
         id: meta
         uses: docker/metadata-action@v5
         with:
@@ -237,7 +237,7 @@ jobs:
             type=raw,value=${{ needs.compute-tags.outputs.base_tag }}
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/master' }}
       
-      - name: Build and push ${{ matrix.mcp }}
+      - name: Build and push production ${{ matrix.mcp }} image
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -250,6 +250,28 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      
+      - name: Docker meta for test image
+        id: meta-test
+        uses: docker/metadata-action@v5
+        with:
+          images: sanjibdevnath/mcp-${{ matrix.mcp }}-test
+          tags: |
+            type=raw,value=${{ needs.compute-tags.outputs.base_tag }}
+      
+      - name: Build and push test ${{ matrix.mcp }} image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ${{ matrix.mcp }}/docker/Dockerfile.test
+          build-args: |
+            BASE_TAG=${{ needs.compute-tags.outputs.base_tag }}
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta-test.outputs.tags }}
+          labels: ${{ steps.meta-test.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=min
   
   # ===========================================================================
   # Stage 7: Test MCPs (Matrix Strategy with Auto-Discovery)
@@ -267,46 +289,90 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Install Make
-        run: sudo apt-get update && sudo apt-get install -y make
-      
-      - name: Pull MCP production images
+      - name: Pull test image
         env:
           BASE_TAG: ${{ needs.compute-tags.outputs.base_tag }}
-          MCP_IMAGE: sanjibdevnath/mcp-${{ matrix.mcp }}:${{ needs.compute-tags.outputs.base_tag }}
+          TEST_IMAGE: sanjibdevnath/mcp-${{ matrix.mcp }}-test:${{ needs.compute-tags.outputs.base_tag }}
         run: |
-          echo "🐳 Pulling production MCP image: $MCP_IMAGE"
-          docker pull $MCP_IMAGE
-          
-          # Tag for docker-compose compatibility with deployment configs
-          docker tag $MCP_IMAGE mcp-${{ matrix.mcp }}:local-sse
-          docker tag $MCP_IMAGE mcp-${{ matrix.mcp }}:local-http
+          echo "🐳 Pulling test image: $TEST_IMAGE"
+          docker pull $TEST_IMAGE
       
-      - name: Run tests using make docker-test command
+      - name: Start MySQL (if testing database)
+        if: matrix.mcp == 'database'
+        run: |
+          docker run -d \
+            --name mysql-test \
+            -e MYSQL_ROOT_PASSWORD=test_password \
+            -e MYSQL_DATABASE=test_mcp_db \
+            -p 3306:3306 \
+            mysql:8.0
+          
+          # Wait for MySQL
+          echo "⏳ Waiting for MySQL..."
+          for i in {1..30}; do
+            if docker exec mysql-test mysqladmin ping -h localhost -ptest_password --silent 2>/dev/null; then
+              echo "✅ MySQL ready"
+              break
+            fi
+            sleep 2
+          done
+          
+          # Initialize test database
+          docker exec mysql-test mysql -uroot -ptest_password < database/tests/fixtures/init_test_db.sql 2>&1 | grep -v "Warning" || true
+      
+      - name: Run tests in test container
         env:
+          BASE_TAG: ${{ needs.compute-tags.outputs.base_tag }}
+          TEST_IMAGE: sanjibdevnath/mcp-${{ matrix.mcp }}-test:${{ needs.compute-tags.outputs.base_tag }}
           APP_ENV: test
           DB_HOST: 127.0.0.1
-          DB_PORT: 3306
           DB_USER: root
           DB_PASSWORD: test_password
           DB_DATABASE: test_mcp_db
         run: |
-          # Run tests using Makefile commands (consistent with local development)
+          # Run make test command inside test container
           case "${{ matrix.mcp }}" in
             calculator)
-              make docker-test-calculator
+              docker run --rm \
+                -v $(pwd):/app \
+                -w /app \
+                -e APP_ENV=test \
+                $TEST_IMAGE \
+                make test-calc
               ;;
             weather)
-              make docker-test-weather
+              docker run --rm \
+                --network host \
+                -v $(pwd):/app \
+                -w /app \
+                -e APP_ENV=test \
+                $TEST_IMAGE \
+                make test-weather
               ;;
             database)
-              make docker-test-database
+              docker run --rm \
+                --network host \
+                -v $(pwd):/app \
+                -w /app \
+                -e APP_ENV=test \
+                -e DB_HOST=127.0.0.1 \
+                -e DB_USER=root \
+                -e DB_PASSWORD=test_password \
+                -e DB_DATABASE=test_mcp_db \
+                $TEST_IMAGE \
+                make test-db
               ;;
             *)
               echo "⚠️ Unknown MCP: ${{ matrix.mcp }}"
               exit 1
               ;;
           esac
+      
+      - name: Stop MySQL (if running)
+        if: always() && matrix.mcp == 'database'
+        run: |
+          docker stop mysql-test || true
+          docker rm mysql-test || true
       
       - name: Upload coverage
         uses: codecov/codecov-action@v4
