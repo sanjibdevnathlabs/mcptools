@@ -1,0 +1,22 @@
+# Weather MCP Test Image
+# Used for running quality checks and tests in isolated Docker environment
+
+ARG BASE_TAG=latest
+FROM sanjibdevnath/mcp-base:${BASE_TAG}
+
+WORKDIR /app
+
+# Copy shared modules and weather code
+COPY shared/ ./shared/
+COPY weather/ ./weather/
+
+# Copy only weather-specific tests (maintain folder structure)
+COPY tests/__init__.py tests/conftest.py ./tests/
+COPY tests/weather/ ./tests/weather/
+
+# Copy configuration files for standardized commands and pytest settings
+COPY Makefile ./Makefile
+COPY pytest.ini ./pytest.ini
+
+# Default command: Run quality checks and tests using Makefile
+CMD ["make", "check", "test-weather"]

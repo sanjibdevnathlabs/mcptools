@@ -145,7 +145,9 @@ class TestWeatherIntegration:
 
         try:
             # Mumbai coordinates
-            result = await weather.main.get_forecast(latitude=19.0760, longitude=72.8777)
+            result = await weather.main.get_forecast(
+                latitude=19.0760, longitude=72.8777
+            )
 
             assert "Forecast" in result or "forecast" in result.lower()
             assert "Temperature" in result or "temp" in result.lower()
@@ -223,7 +225,9 @@ class TestWeatherCriticalPaths:
             assert len(forecast_city) > 0
 
             # Forecast by coordinates
-            forecast_coords = await weather.main.get_forecast(latitude=19.0, longitude=72.8)
+            forecast_coords = await weather.main.get_forecast(
+                latitude=19.0, longitude=72.8
+            )
             assert isinstance(forecast_coords, str)
             assert len(forecast_coords) > 0
 

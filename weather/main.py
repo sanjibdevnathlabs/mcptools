@@ -1,53 +1,22 @@
-import logging
-import os
-import signal
 from typing import Any, Optional
 
 import httpx
-import uvicorn
-from mcp.server import FastMCP, Server
+from mcp.server import FastMCP
 from mcp.server.fastmcp.prompts import base
-from mcp.server.sse import SseServerTransport
-from starlette.applications import Starlette
-from starlette.requests import Request
-from starlette.routing import Mount, Route
 
+from shared.logging import setup_logging
 from weather.config import Config
 
 # Initialize config
 config = Config()
 
+# Setup logging using shared logging module
+# Pass transport_mode so stdio can be forced to file logging
+logger = setup_logging(config, "weather", transport_mode=config.server.transport_mode)
+
+# Create FastMCP server using configuration
+# Pass host/port explicitly so FastMCP doesn't use defaults
 mcp = FastMCP(config.app.name, host=config.server.host, port=config.server.port)
-
-# Configure logging
-logging.basicConfig(
-    level=getattr(logging, config.server.log_level),
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
-logger = logging.getLogger(__name__)
-
-# Global variables for shutdown handling
-shutdown_requested = False
-server_instance = None
-
-
-def force_shutdown_handler(signum, frame):
-    """Immediate shutdown handler that forces process exit."""
-    global shutdown_requested
-
-    logger.info(f"Received signal {signum}. Forcing immediate shutdown...")
-    logger.info("Disconnecting all MCP clients and exiting...")
-
-    # Force immediate exit - no graceful shutdown
-    os._exit(0)
-
-
-def setup_aggressive_signal_handlers():
-    """Setup signal handlers that will actually exit the process."""
-    signal.signal(signal.SIGINT, force_shutdown_handler)
-    signal.signal(signal.SIGTERM, force_shutdown_handler)
-    if hasattr(signal, "SIGBREAK"):
-        signal.signal(signal.SIGBREAK, force_shutdown_handler)
 
 
 async def make_openweather_request(
@@ -260,83 +229,23 @@ def get_initial_prompts() -> list[base.Message]:
     ]
 
 
-def create_starlette_app(mcp_server: Server, *, debug: bool = False) -> Starlette:
-    """Create a Starlette application that can serve the provided mcp server with SSE."""
-    sse = SseServerTransport("/messages/")
-
-    async def handle_sse(request: Request) -> None:
-        """Handle SSE connections with shutdown awareness."""
-        global shutdown_requested
-        try:
-            logger.info("New SSE connection established")
-            async with sse.connect_sse(
-                request.scope,
-                request.receive,
-                request._send,  # noqa: SLF001
-            ) as (read_stream, write_stream):
-                # Check for shutdown during connection
-                if shutdown_requested:
-                    logger.info("Shutdown requested, closing SSE connection")
-                    return
-
-                await mcp_server.run(
-                    read_stream,
-                    write_stream,
-                    mcp_server.create_initialization_options(),
-                )
-        except Exception as e:
-            logger.error(f"Error in SSE handler: {e}")
-            if shutdown_requested:
-                logger.info("Error during shutdown - this is expected")
-                return
-            raise
-        finally:
-            logger.info("SSE connection closed")
-
-    return Starlette(
-        debug=debug,
-        routes=[
-            Route("/sse", endpoint=handle_sse),
-            Mount("/messages/", app=sse.handle_post_message),
-        ],
-    )
-
-
-def run_server_with_force_exit(host: str, port: int, debug: bool = True):
-    """Run server with immediate exit on CTRL+C."""
-
-    mcp_server = mcp._mcp_server  # noqa: WPS437
-    starlette_app = create_starlette_app(mcp_server, debug=debug)
-
-    logger.info(f"Starting weather MCP server on {host}:{port}")
-    logger.info(
-        "Press CTRL+C to immediately stop the server and disconnect all clients"
-    )
-
-    # Install signal handlers before starting
-    setup_aggressive_signal_handlers()
-
-    try:
-        # Use simple uvicorn.run - when CTRL+C is pressed, signal handler will os._exit(0)
-        uvicorn.run(
-            starlette_app,
-            host=host,
-            port=port,
-            log_level="info" if not debug else "debug",
-            access_log=True,
-            reload=False,
-            use_colors=True,
-        )
-    except Exception as e:
-        logger.error(f"Server error: {e}")
-
-    # This should never be reached due to os._exit(0) in signal handler
-    logger.info("Server exiting normally")
-    os._exit(0)
-
-
 def main():
     """Main entry point for weather server."""
+    # Validate transport mode
+    valid_transports = ["stdio", "sse", "streamable-http"]
+    if config.server.transport_mode not in valid_transports:
+        logger.error(
+            f"Invalid transport mode: {config.server.transport_mode}. "
+            f"Must be one of: {valid_transports}"
+        )
+        return
+
+    logger.info(
+        f"Starting weather MCP server: transport={config.server.transport_mode}, "
+        f"host={config.server.host}, port={config.server.port}"
+    )
+
+    # Run server with configured transport (FastMCP reads host/port from environment variables)
     mcp.run(transport=config.server.transport_mode)
 
 

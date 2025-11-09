@@ -1,0 +1,128 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: mysql-mcp
+    environment:
+      - MYSQL_ROOT_PASSWORD=testpassword
+      - MYSQL_DATABASE=test_db
+      - MYSQL_USER=mcp_user
+      - MYSQL_PASSWORD=mcp_password
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ../../tests/fixtures/init_test_db.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-ptestpassword"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks:
+      - mcp-network
+
+  database-sse:
+    build:
+      context: ../../..
+      dockerfile: database/docker/Dockerfile
+      args:
+        BASE_TAG: local-dev
+    image: mcp-database:local-sse
+    container_name: database-sse
+    environment:
+      - TRANSPORT_MODE=sse
+      - LOG_LEVEL=DEBUG
+      - FASTMCP_HOST=0.0.0.0
+      - FASTMCP_PORT=8086
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_USER=root
+      - DB_PASSWORD=testpassword
+      - DB_DATABASE=test_db
+    ports:
+      - "8086:8086"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import socket; s=socket.socket(); s.connect(('localhost',8086)); s.close()\""]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    networks:
+      - mcp-network
+
+  database-http:
+    build:
+      context: ../../..
+      dockerfile: database/docker/Dockerfile
+      args:
+        BASE_TAG: local-dev
+    image: mcp-database:local-http
+    container_name: database-http
+    environment:
+      - TRANSPORT_MODE=streamable-http
+      - LOG_LEVEL=DEBUG
+      - FASTMCP_HOST=0.0.0.0
+      - FASTMCP_PORT=8087
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_USER=root
+      - DB_PASSWORD=testpassword
+      - DB_DATABASE=test_db
+    ports:
+      - "8087:8087"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import socket; s=socket.socket(); s.connect(('localhost',8087)); s.close()\""]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    networks:
+      - mcp-network
+
+  # Test service - Run quality checks and tests
+  # Runs automatically with docker-compose up (exit code indicates success/failure)
+  # Can also run explicitly: docker-compose run --rm database-test
+  database-test:
+    build:
+      context: ../../..
+      dockerfile: database/docker/Dockerfile.test
+      args:
+        BASE_TAG: local-dev
+    image: mcp-database:test
+    container_name: database-test
+    environment:
+      - APP_ENV=test
+      - LOG_LEVEL=ERROR
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_USER=root
+      - DB_PASSWORD=testpassword
+      - DB_DATABASE=test_db
+    volumes:
+      # Mount source for testing local changes
+      - ../../../database:/app/database:ro
+      - ../../../shared:/app/shared:ro
+      - ../../../tests:/app/tests:ro
+    working_dir: /app
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - mcp-network
+    restart: "no"  # Don't restart after tests complete
+
+volumes:
+  mysql-data:
+    name: mcp-mysql-data
+
+networks:
+  mcp-network:
+    driver: bridge
+    name: mcp-local-network
+

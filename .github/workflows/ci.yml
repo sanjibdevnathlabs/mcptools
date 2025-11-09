@@ -1,0 +1,421 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches:
+      - master  # Only trigger on commits to master
+  pull_request:  # Trigger on PR from any branch to any branch
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  BASE_IMAGE: sanjibdevnath/mcp-base
+  PYTHON_VERSION: '3.13'
+
+jobs:
+  # ===========================================================================
+  # Stage 1: Auto-Discover MCPs
+  # ===========================================================================
+  detect-mcps:
+    name: 🔍 Auto-Discover MCPs
+    runs-on: ubuntu-latest
+    outputs:
+      mcps: ${{ steps.discover.outputs.mcps }}
+      
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Discover MCPs
+        id: discover
+        run: |
+          chmod +x .github/scripts/detect-mcps.sh
+          .github/scripts/detect-mcps.sh
+  
+  # ===========================================================================
+  # Stage 2: Detect File Changes
+  # ===========================================================================
+  detect-changes:
+    name: 🔍 Detect Changed Files
+    needs: detect-mcps
+    runs-on: ubuntu-latest
+    outputs:
+      base_changed: ${{ steps.filter.outputs.base }}
+      mcps_changed: ${{ steps.filter.outputs.mcps }}
+      
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            base:
+              - 'requirements*.txt'
+              - 'shared/docker/**'
+            mcps:
+              - '*/docker/**'
+              - '*/src/**'
+              - '*/config/**'
+              - 'tests/**'
+  
+  # ===========================================================================
+  # Stage 3: Compute Image Tags
+  # ===========================================================================
+  compute-tags:
+    name: 🏷️ Compute Image Tags
+    runs-on: ubuntu-latest
+    outputs:
+      base_tag: ${{ steps.tags.outputs.base_tag }}
+      
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Compute tags
+        id: tags
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            # PR: Use full branch hash (reused across commits in same PR)
+            BRANCH="${GITHUB_HEAD_REF}"
+            TAG="br-$(echo -n "$BRANCH" | md5sum | awk '{print $1}')"
+            echo "🏷️ PR build - branch hash: $TAG"
+            echo "📝 Branch: $BRANCH"
+          else
+            # Push to branch: Use commit SHA
+            TAG="${GITHUB_SHA}"
+            echo "🏷️ Push build - commit SHA: $TAG"
+          fi
+          echo "base_tag=$TAG" >> $GITHUB_OUTPUT
+          echo "BASE_TAG=$TAG" >> $GITHUB_ENV
+  
+  # ===========================================================================
+  # Stage 4: Build Base Image
+  # ===========================================================================
+  build-base:
+    name: 🐳 Build Base Image
+    needs: [detect-changes, compute-tags]
+    if: needs.detect-changes.outputs.base_changed == 'true' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Check if base image exists
+        id: check
+        env:
+          BASE_TAG: ${{ needs.compute-tags.outputs.base_tag }}
+        run: |
+          # Check if image already exists (skip rebuild)
+          if docker manifest inspect ${{ env.BASE_IMAGE }}:$BASE_TAG > /dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "✅ Base image exists: $BASE_TAG (skip build)"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "🔨 Base image missing: $BASE_TAG (need build)"
+          fi
+      
+      - name: Set up Docker Buildx
+        if: steps.check.outputs.exists == 'false'
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Login to Docker Hub
+        if: steps.check.outputs.exists == 'false'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      
+      - name: Docker meta
+        if: steps.check.outputs.exists == 'false'
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.BASE_IMAGE }}
+          tags: |
+            type=raw,value=${{ needs.compute-tags.outputs.base_tag }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/master' }}
+      
+      - name: Build and push base image
+        if: steps.check.outputs.exists == 'false'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: shared/docker/Dockerfile.base
+          platforms: ${{ github.event_name == 'pull_request' && 'linux/amd64' || 'linux/amd64,linux/arm64' }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=${{ github.event_name == 'pull_request' && 'min' || 'max' }}
+  
+  # ===========================================================================
+  # Stage 5: Code Quality Checks (black + ruff + mypy) - Per MCP
+  # ===========================================================================
+  quality-checks:
+    name: 🔍 Quality Check ${{ matrix.mcp }}
+    needs: detect-mcps
+    runs-on: ubuntu-latest
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        mcp: ${{ fromJson(needs.detect-mcps.outputs.mcps) }}
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+      
+      - name: Install dependencies
+        run: make install
+      
+      - name: Run quality checks (black + ruff + mypy)
+        run: |
+          case "${{ matrix.mcp }}" in
+            calculator)
+              make check-calc
+              ;;
+            weather)
+              make check-weather
+              ;;
+            database)
+              make check-db
+              ;;
+            *)
+              echo "⚠️ Unknown MCP: ${{ matrix.mcp }}"
+              exit 1
+              ;;
+          esac
+  
+  security:
+    name: 🔒 Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+      
+      - name: Install security tools
+        run: pip install bandit safety pip-audit
+      
+      - name: Run Bandit
+        run: bandit -r . -x tests,venv --format json --output bandit-report.json
+        continue-on-error: true
+      
+      - name: Run Safety
+        run: safety check --json > safety-report.json
+        continue-on-error: true
+      
+      - name: Run pip-audit
+        run: pip-audit --format json > pip-audit-report.json
+        continue-on-error: true
+  
+  # ===========================================================================
+  # Stage 6: Build MCP Production Images (Matrix Strategy) - Build on PRs and Master
+  # ===========================================================================
+  build-mcps:
+    name: 🐳 Build ${{ matrix.mcp }} Production Image
+    needs: [detect-mcps, compute-tags, build-base]
+    runs-on: ubuntu-latest
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        mcp: ${{ fromJson(needs.detect-mcps.outputs.mcps) }}
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      
+      - name: Docker meta for production image
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: sanjibdevnath/mcp-${{ matrix.mcp }}
+          tags: |
+            type=raw,value=${{ needs.compute-tags.outputs.base_tag }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/master' }}
+      
+      - name: Build and push production ${{ matrix.mcp }} image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ${{ matrix.mcp }}/docker/Dockerfile
+          build-args: |
+            BASE_TAG=${{ needs.compute-tags.outputs.base_tag }}
+          platforms: ${{ github.ref == 'refs/heads/master' && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      
+      - name: Docker meta for test image
+        id: meta-test
+        uses: docker/metadata-action@v5
+        with:
+          images: sanjibdevnath/mcp-${{ matrix.mcp }}-test
+          tags: |
+            type=raw,value=${{ needs.compute-tags.outputs.base_tag }}
+      
+      - name: Build and push test ${{ matrix.mcp }} image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ${{ matrix.mcp }}/docker/Dockerfile.test
+          build-args: |
+            BASE_TAG=${{ needs.compute-tags.outputs.base_tag }}
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta-test.outputs.tags }}
+          labels: ${{ steps.meta-test.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=min
+  
+  # ===========================================================================
+  # Stage 7a: Test Non-Database MCPs (Calculator, Weather)
+  # ===========================================================================
+  test-mcps:
+    name: 🧪 Test ${{ matrix.mcp }}
+    needs: [detect-mcps, compute-tags, build-mcps, quality-checks, security]
+    runs-on: ubuntu-latest
+    
+    # Filter out database from matrix
+    if: |
+      contains(fromJson(needs.detect-mcps.outputs.mcps), 'calculator') || 
+      contains(fromJson(needs.detect-mcps.outputs.mcps), 'weather')
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        mcp: [calculator, weather]
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: |
+            requirements.txt
+            requirements-test.txt
+      
+      - name: Install dependencies
+        run: make install
+      
+      - name: Start mock weather server (only for weather MCP)
+        if: matrix.mcp == 'weather'
+        run: |
+          python weather/mock_weather_api.py &
+          MOCK_PID=$!
+          echo "MOCK_PID=$MOCK_PID" >> $GITHUB_ENV
+          
+          # Wait for mock server to be ready
+          for i in {1..10}; do
+            if curl -s http://127.0.0.1:8765/health > /dev/null 2>&1; then
+              echo "✅ Mock weather server is ready"
+              break
+            fi
+            sleep 1
+          done
+      
+      - name: Run tests
+        env:
+          APP_ENV: test
+        run: |
+          case "${{ matrix.mcp }}" in
+            calculator)
+              make test-calc
+              ;;
+            weather)
+              make test-weather
+              ;;
+            *)
+              echo "⚠️ Unknown MCP: ${{ matrix.mcp }}"
+              exit 1
+              ;;
+          esac
+      
+      - name: Stop mock weather server (only for weather MCP)
+        if: always() && matrix.mcp == 'weather'
+        run: |
+          if [ -n "$MOCK_PID" ]; then
+            kill $MOCK_PID || true
+          fi
+  
+  # ===========================================================================
+  # Stage 7b: Test Database MCP (with MySQL service)
+  # ===========================================================================
+  test-database:
+    name: 🧪 Test database
+    needs: [detect-mcps, compute-tags, build-mcps, quality-checks, security]
+    runs-on: ubuntu-latest
+    
+    # Only run if database MCP exists
+    if: contains(fromJson(needs.detect-mcps.outputs.mcps), 'database')
+    
+    # MySQL service only for database tests
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: test_password
+          MYSQL_DATABASE: test_mcp_db
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -ptest_password"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+        ports:
+          - 3306:3306
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: |
+            requirements.txt
+            requirements-test.txt
+      
+      - name: Install dependencies
+        run: make install
+      
+      - name: Install MySQL client
+        run: sudo apt-get update && sudo apt-get install -y mysql-client
+      
+      - name: Run database tests
+        env:
+          APP_ENV: test
+          DB_HOST: 127.0.0.1
+          DB_USER: root
+          DB_PASSWORD: test_password
+          DB_DATABASE: test_mcp_db
+        run: make test-db

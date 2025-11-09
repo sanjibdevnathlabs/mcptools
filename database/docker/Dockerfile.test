@@ -1,0 +1,22 @@
+# Database MCP Test Image
+# Used for running quality checks and tests in isolated Docker environment
+
+ARG BASE_TAG=latest
+FROM sanjibdevnath/mcp-base:${BASE_TAG}
+
+WORKDIR /app
+
+# Copy shared modules and database code
+COPY shared/ ./shared/
+COPY database/ ./database/
+
+# Copy only database-specific tests (maintain folder structure)
+COPY tests/__init__.py tests/conftest.py ./tests/
+COPY tests/database/ ./tests/database/
+
+# Copy configuration files for standardized commands and pytest settings
+COPY Makefile ./Makefile
+COPY pytest.ini ./pytest.ini
+
+# Default command: Run quality checks and tests
+CMD ["make", "check", "test-db"]

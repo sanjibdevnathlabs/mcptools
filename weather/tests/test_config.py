@@ -1,6 +1,5 @@
 """Unit tests for weather configuration"""
 
-
 import pytest
 
 from weather.config import Config
@@ -36,7 +35,9 @@ class TestWeatherConfig:
     def test_app_name(self):
         """Test application name is set correctly"""
         config = Config()
-        assert config.app.name == "weather-mcp", f"Expected 'weather-mcp', got '{config.app.name}'"
+        assert (
+            config.app.name == "weather-mcp"
+        ), f"Expected 'weather-mcp', got '{config.app.name}'"
 
     def test_api_config_attributes(self):
         """Test API configuration has required attributes"""
@@ -52,7 +53,11 @@ class TestWeatherConfig:
         assert hasattr(config.server, "transport_mode")
         assert hasattr(config.server, "host")
         assert hasattr(config.server, "port")
-        assert hasattr(config.server, "log_level")
+
+        # Logger config is now separate
+        assert hasattr(config.logger, "level")
+        assert hasattr(config.logger, "format")
+        assert hasattr(config.logger, "destination")
 
     def test_api_base_url(self):
         """Test API base URL is correctly configured"""
@@ -77,4 +82,3 @@ class TestWeatherConfig:
         config = Config()
         assert isinstance(config.server.port, int)
         assert 1 <= config.server.port <= 65535
-

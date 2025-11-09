@@ -121,8 +121,9 @@ class DatabaseManager:
     @asynccontextmanager
     async def get_connection(self):
         """Get a database connection from the pool with automatic cleanup."""
+        # Lazy initialization of connection pool
         if not self.pool:
-            raise Exception("Connection pool is not initialized")
+            await self.initialize_pool()
 
         conn = None
         try:
@@ -151,12 +152,9 @@ class DatabaseManager:
         Returns:
             Dictionary with query results and metadata
         """
+        # Lazy initialization of connection pool
         if not self.pool:
-            return {
-                "success": False,
-                "error": "Connection pool is not initialized",
-                "error_code": "POOL_NOT_INITIALIZED",
-            }
+            await self.initialize_pool()
 
         # Validate query length
         if len(sql) > self.config.database.max_query_length:

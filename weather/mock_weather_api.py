@@ -171,7 +171,9 @@ def generate_forecast_data(city_name: str, coord: dict) -> dict:
 
 @app.get("/data/2.5/weather")
 async def get_current_weather(
-    q: Optional[str] = Query(None, description="City name with country code (e.g., Mumbai,IN)"),
+    q: Optional[str] = Query(
+        None, description="City name with country code (e.g., Mumbai,IN)"
+    ),
     lat: Optional[float] = Query(None, description="Latitude"),
     lon: Optional[float] = Query(None, description="Longitude"),
     appid: str = Query(..., description="API key"),
@@ -182,7 +184,10 @@ async def get_current_weather(
     if not appid or appid == "invalid_key":
         raise HTTPException(
             status_code=401,
-            detail={"cod": 401, "message": "Invalid API key. Please see https://openweathermap.org/faq#error401 for more info."},
+            detail={
+                "cod": 401,
+                "message": "Invalid API key. Please see https://openweathermap.org/faq#error401 for more info.",
+            },
         )
 
     # Handle city query
@@ -210,7 +215,9 @@ async def get_current_weather(
 
 @app.get("/data/2.5/forecast")
 async def get_forecast(
-    q: Optional[str] = Query(None, description="City name with country code (e.g., Mumbai,IN)"),
+    q: Optional[str] = Query(
+        None, description="City name with country code (e.g., Mumbai,IN)"
+    ),
     lat: Optional[float] = Query(None, description="Latitude"),
     lon: Optional[float] = Query(None, description="Longitude"),
     appid: str = Query(..., description="API key"),
@@ -221,7 +228,10 @@ async def get_forecast(
     if not appid or appid == "invalid_key":
         raise HTTPException(
             status_code=401,
-            detail={"cod": 401, "message": "Invalid API key. Please see https://openweathermap.org/faq#error401 for more info."},
+            detail={
+                "cod": 401,
+                "message": "Invalid API key. Please see https://openweathermap.org/faq#error401 for more info.",
+            },
         )
 
     # Handle city query
@@ -265,4 +275,3 @@ def run_mock_server(host: str = "127.0.0.1", port: int = 8765):
 
 if __name__ == "__main__":
     run_mock_server()
-

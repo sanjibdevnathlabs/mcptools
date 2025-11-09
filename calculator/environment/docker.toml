@@ -1,0 +1,6 @@
+[app]
+environment = "docker"
+
+[logger]
+# Override for Docker - JSON logging for container log aggregation
+format = "json"

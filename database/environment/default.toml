@@ -29,15 +29,18 @@ transport_mode = "${TRANSPORT_MODE:-stdio}"  # Options: stdio, sse, streamable-h
 host = "${FASTMCP_HOST:-127.0.0.1}"          # Server host
 port = "${FASTMCP_PORT:-8000}"               # Server port (for HTTP-based transports)
 
-# Logging configuration
-log_level = "INFO"
-log_file = "logs/database_mcp.log"
-log_destination = "stderr"  # CRITICAL: Must be "file" or "stderr" for STDIO transport!
+[logger]
+# Logging configuration with environment variable support
+level = "${LOG_LEVEL:-INFO}"                 # DEBUG, INFO, WARNING, ERROR, CRITICAL
+format = "${LOG_FORMAT:-text}"               # text or json
+destination = "${LOG_DESTINATION:-stdout}"   # stdout, stderr, file, both
+file_path = "${LOG_FILE_PATH:-logs/database.log}"  # Log file path when destination includes "file"
 
 [mcp]
 # MCP server configuration
 server_name = "database-mcp"
 readonly_mode = false
+tool_mode = "${MCP_TOOL_MODE:-full}"  # "lite" (8 core tools) or "full" (22 tools including enterprise features)
 
 # Allowed query types (comma-separated string, case-insensitive)
 # 

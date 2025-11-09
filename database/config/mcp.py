@@ -7,7 +7,7 @@ class MCPConfig:
     server_name: str = "database-mcp"
     server_version: str = "1.0.0"
     readonly_mode: bool = False
-    tool_mode: bool = True
+    tool_mode: str = "full"  # "lite" (8 tools) or "full" (22 tools)
     enable_rate_limiting: bool = True
     max_queries_per_minute: int = 60
     enable_query_execution: bool = True

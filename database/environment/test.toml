@@ -3,11 +3,13 @@
 
 [database]
 # Test database connection with environment variable defaults
-host = "${TEST_DB_HOST:-localhost}"
-port = "${TEST_DB_PORT:-3306}"
-user = "${TEST_DB_USER:-test_user}"
-password = "${TEST_DB_PASSWORD:-test_password}"
-database = "${TEST_DB_DATABASE:-test_db}"
+# Local tests: Uses localhost with root/root and test_db
+# Docker tests: Overridden by DB_* environment variables
+host = "${DB_HOST:-localhost}"
+port = "${DB_PORT:-3306}"
+user = "${DB_USER:-root}"
+password = "${DB_PASSWORD:-root}"
+database = "${DB_DATABASE:-test_db}"
 charset = "utf8mb4"
 
 # Smaller pool for tests
@@ -23,17 +25,19 @@ transport_mode = "${TRANSPORT_MODE:-stdio}"
 host = "${FASTMCP_HOST:-127.0.0.1}"
 port = "${FASTMCP_PORT:-8000}"
 
+[logger]
 # Minimal logging for tests
-log_level = "ERROR"
-log_destination = "file"
+level = "ERROR"
+destination = "file"
 
 [mcp]
-# SAFE MODE: Readonly for tests
-readonly_mode = true
+# Test mode: Allow all operations for comprehensive testing
+readonly_mode = false
+tool_mode = "${MCP_TOOL_MODE:-full}"  # Test all tools in "full" mode by default
 
-# Only allow safe read operations during tests
-# This prevents accidental data modification during testing
-allowed_query_types = "SELECT, SHOW, DESCRIBE, EXPLAIN"
+# Allow all query types for integration tests
+# Tests use isolated test_db database, so modifications are safe
+allowed_query_types = "SELECT, INSERT, UPDATE, DELETE, SHOW, DESCRIBE, EXPLAIN, CREATE, DROP, ALTER"
 
 [security]
 # Enable security validation

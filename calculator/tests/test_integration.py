@@ -169,4 +169,3 @@ class TestCalculatorCriticalPaths:
         assert power(5, 2) == 25
         assert sqrt(100) == 10.0
         assert factorial(6) == 720
-

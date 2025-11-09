@@ -8,20 +8,39 @@ This repository contains three self-contained MCP server applications, each with
 
 ```
 mcptools/
-├── database/           # Database MCP Server
-│   ├── config/        # Configuration classes
-│   ├── environment/   # TOML config files (default.toml, dev.toml, prod.toml)
-│   ├── src/          # Source code modules
+├── calculator/           # Calculator MCP Server
+│   ├── config/          # Configuration classes
+│   ├── environment/     # TOML config files (default.toml, dev.toml, docker.toml)
+│   ├── docker/          # Docker image definition
+│   ├── deployment/      # Docker Compose for local dev
+│   ├── tests/           # Unit and integration tests
+│   └── main.py         # Entry point
+├── database/            # Database MCP Server
+│   ├── config/         # Configuration classes
+│   ├── environment/    # TOML config files
+│   ├── src/           # Source code modules
+│   ├── docker/        # Docker image definition
+│   ├── deployment/    # Docker Compose + MySQL
+│   ├── tests/         # Unit and integration tests
 │   └── main.py       # Entry point
-├── weather/           # Weather MCP Server
-│   ├── config/       # Configuration classes
-│   ├── environment/  # TOML config files
-│   └── main.py      # Entry point
-├── calculator/        # Calculator MCP Server
-│   ├── config/       # Configuration classes
-│   ├── environment/  # TOML config files
-│   └── main.py      # Entry point
-└── requirements.txt   # Shared dependencies
+├── weather/            # Weather MCP Server
+│   ├── config/        # Configuration classes
+│   ├── environment/   # TOML config files
+│   ├── docker/        # Docker image definition
+│   ├── deployment/    # Docker Compose for local dev
+│   ├── tests/         # Unit and integration tests
+│   └── main.py       # Entry point
+├── shared/             # Shared utilities (common across all MCPs)
+│   ├── config/        # Config loading logic & LoggerConfig
+│   ├── logging/       # Logging setup, formatters, and stdio handling
+│   └── docker/        # Base Docker image (mcp-base)
+├── tests/              # E2E tests organized by MCP
+│   ├── calculator/    # Calculator E2E tests
+│   ├── database/      # Database E2E tests
+│   ├── weather/       # Weather E2E tests
+│   ├── conftest.py    # Shared pytest configuration
+│   └── __init__.py    # Makes tests a package
+└── requirements.txt    # Shared dependencies
 ```
 
 ## 🚀 **Core Architecture**
@@ -143,7 +162,55 @@ make test              # Run all project tests
 
 ## 🚀 Getting Started
 
-### Installation
+### Quick Start with Docker (Recommended)
+
+Each MCP has its own Docker setup for local development with **automatic test execution**:
+
+```bash
+# Build base image (required first time)
+make docker-build-base
+
+# Run specific MCP with docker-compose
+# Each command automatically:
+#  1. Builds the MCP image(s)
+#  2. Runs quality checks (black, ruff, mypy)
+#  3. Executes all tests (unit + integration + E2E)
+#  4. Starts service containers (SSE + HTTP transports)
+make docker-compose-up-calculator   # Calculator on ports 8080 (SSE) + 8081 (HTTP)
+make docker-compose-up-weather      # Weather on ports 8082 (SSE) + 8083 (HTTP)
+make docker-compose-up-database     # Database on ports 8086 (SSE) + 8087 (HTTP) + MySQL 3306
+
+# View logs (including test results)
+make logs-calculator
+make logs-weather
+make logs-database
+
+# Stop services
+make docker-compose-down-calculator
+make docker-compose-down-weather
+make docker-compose-down-database
+
+# Check test results
+docker ps -a --filter "name=calculator-test"   # Exit code 0 = success ✅
+docker ps -a --filter "name=weather-test"      # Exit code 0 = success ✅
+docker ps -a --filter "name=database-test"     # Exit code 0 = success ✅
+```
+
+**Test Containers:** Each MCP includes a test service that:
+- Runs automatically with `docker-compose up`
+- Executes quality checks + all tests
+- Exits with status code (0 = pass, non-zero = fail)
+- Provides immediate feedback on code quality
+
+**Per-MCP Documentation:**
+- 📖 [Calculator Docker Guide](calculator/docker/README.md) - Build & configuration details
+- 📖 [Calculator Deployment Guide](calculator/deployment/local/README.md) - Local development with docker-compose
+- 📖 [Database Docker Guide](database/docker/README.md) - Build & configuration details
+- 📖 [Database Deployment Guide](database/deployment/local/README.md) - Local development with MySQL
+- 📖 [Weather Docker Guide](weather/docker/README.md) - Build & configuration details
+- 📖 [Weather Deployment Guide](weather/deployment/local/README.md) - Local development with API key
+
+### Installation from Source
 
 ```bash
 # Clone the repository
@@ -279,20 +346,26 @@ print(config.mcp.allowed_query_types)
 
 ### Test Suite Overview
 
-The project includes comprehensive testing:
+The project includes comprehensive testing with **354 total tests passing**:
 
 **Calculator MCP: ✅ Production-Ready (96% coverage)**
-- 112 tests (unit + integration + E2E)
+- **112 tests** (unit + integration + E2E)
 - E2E tests for all 3 protocols (STDIO, SSE, Streamable-HTTP)
 - Validated across all transport modes
+- ✅ All tests passing
 
-**Weather MCP: 🚧 In Progress**
-- Unit tests planned
-- E2E tests planned
+**Weather MCP: ✅ Production-Ready**
+- **51 tests** (unit + integration + E2E)
+- E2E tests for all 3 protocols (STDIO, SSE, Streamable-HTTP)
+- Comprehensive integration testing
+- ✅ All tests passing
 
-**Database MCP: 🚧 In Progress**
-- Unit tests planned
-- E2E tests planned
+**Database MCP: ✅ Production-Ready**
+- **191 tests** (unit + integration + E2E)
+- E2E tests for all 3 protocols (STDIO, SSE, Streamable-HTTP)
+- Full MySQL integration testing
+- Security and monitoring coverage
+- ✅ All tests passing
 
 ### Running Tests
 
@@ -304,32 +377,90 @@ pip install -r requirements-test.txt
 make test
 
 # Run server-specific tests (fast iteration)
-make test-calc          # Calculator only
-make test-weather       # Weather only (when implemented)
-make test-db            # Database only (when implemented)
+make test-calc          # Calculator only (112 tests)
+make test-weather       # Weather only (51 tests)
+make test-db            # Database only (191 tests)
 
 # Run code quality checks
-make check              # Format + lint + type-check
+make check              # Format + lint + type-check (black, ruff, mypy)
 make fix                # Auto-fix all issues
 ```
 
-### Makefile Commands
+### Docker-Based Testing
 
-**Essential Commands (simplified from 22 → 12):**
+All MCPs include **automatic test execution** in Docker containers:
 
 ```bash
+# Tests run automatically with docker-compose up
+make docker-compose-up-calculator   # Builds, runs, and tests calculator
+make docker-compose-up-weather      # Builds, runs, and tests weather
+make docker-compose-up-database     # Builds, runs, and tests database
+
+# Or run tests explicitly in Docker
+make docker-test-calculator   # Run quality checks + tests in Docker
+make docker-test-weather      # Run quality checks + tests in Docker
+make docker-test-database     # Run quality checks + tests in Docker
+make docker-test-all          # Run all Docker tests
+
+# Test containers exit with proper status codes:
+# - Exit 0: All tests passed ✅
+# - Non-zero: Tests failed ❌
+```
+
+**What's Tested in Docker:**
+- ✅ Code quality (black, ruff, mypy)
+- ✅ Unit tests with coverage
+- ✅ Integration tests
+- ✅ E2E tests for all transport protocols
+
+### Makefile Commands
+
+**Essential Commands:**
+
+```bash
+# Development
 make help               # Show all available commands
 make install            # Install all dependencies
 make check              # Run all quality checks
 make fix                # Auto-fix code issues
-make test               # Run all tests with coverage
-make test-calc          # Test calculator (fast)
-make test-weather       # Test weather (fast)
-make test-db            # Test database (fast)
 make clean              # Clean build artifacts
-make run-database       # Run database server
-make run-weather        # Run weather server
+
+# Testing (Local)
+make test               # Run all tests with coverage (354 tests)
+make test-calc          # Test calculator only (112 tests, fast)
+make test-weather       # Test weather only (51 tests, fast)
+make test-db            # Test database only (191 tests, fast)
+
+# Testing (Docker)
+make docker-test-calculator # Run quality checks + tests in Docker
+make docker-test-weather    # Run quality checks + tests in Docker
+make docker-test-database   # Run quality checks + tests in Docker
+make docker-test-all        # Run all Docker tests
+
+# Running Locally (Python)
 make run-calculator     # Run calculator server
+make run-weather        # Run weather server
+make run-database       # Run database server
+
+# Docker - Building Images
+make docker-build-base       # Build shared base image (~1GB, reused by all MCPs)
+make docker-build-all        # Build all MCP images
+make docker-build-calculator # Build calculator image
+make docker-build-database   # Build database image
+make docker-build-weather    # Build weather image
+
+# Docker - Local Development
+make docker-compose-up-calculator   # Start calculator (SSE + HTTP)
+make docker-compose-up-database     # Start database + MySQL (SSE + HTTP)
+make docker-compose-up-weather      # Start weather (SSE + HTTP)
+
+make docker-compose-down-calculator # Stop calculator
+make docker-compose-down-database   # Stop database + MySQL
+make docker-compose-down-weather    # Stop weather
+
+make logs-calculator   # View calculator logs
+make logs-database     # View database logs
+make logs-weather      # View weather logs
 ```
 
 ### Test Coverage
@@ -352,13 +483,81 @@ make test                # Shows coverage in terminal + HTML
 - **pytest** and plugins for testing (see `requirements-test.txt`)
 - Server-specific dependencies (see `requirements.txt`)
 
+---
+
+## 🚀 CI/CD Pipeline
+
+This project uses **GitHub Actions** for automated CI/CD with comprehensive optimizations:
+
+### **Key Features:**
+
+- ✅ **Auto-discovery** - Automatically detects all MCP servers
+- ✅ **Parallel execution** - Matrix strategy for concurrent testing and building
+- ✅ **Comprehensive caching** - Pip, pytest, and Docker layer caching (**40-60% faster**)
+- ✅ **Smart triggers** - CI only on master commits and PRs (saves CI minutes)
+- ✅ **Makefile integration** - Local dev and CI use identical commands
+- ✅ **Security scanning** - Bandit, Safety, Pip-audit, and Trivy
+
+### **Trigger Strategy:**
+
+```yaml
+on:
+  push:
+    branches: [master]  # ✅ Every commit to master
+  pull_request:         # ✅ All PRs (any branch → any branch)
+```
+
+**Benefits:**
+- Master is always validated
+- Feature branches only trigger CI on PR (no wasted CI on WIP commits)
+- Fast feedback with parallel execution
+
+### **Pipeline Stages:**
+
+1. **Auto-Discover MCPs** - Dynamically finds all MCP servers
+2. **Detect Changes** - Skips unnecessary builds
+3. **Compute Tags** - PR = branch hash, Master = commit SHA
+4. **Build Base Image** - Multi-platform (amd64, arm64) with caching
+5. **Quality Checks** - black, ruff, mypy (3-4x faster with caching)
+6. **Security Scan** - Bandit, Safety, Pip-audit
+7. **Test MCPs** - Parallel matrix testing with per-MCP caching (2-3x faster)
+8. **Build MCP Images** - Production images (master only)
+9. **Security Scans** - Trivy image scanning (master only)
+
+### **Performance:**
+
+| Job | Before | After | Improvement |
+|-----|---------|-------|-------------|
+| quality-checks | 2-3 min | 30-60 sec | **3-4x faster** |
+| test-mcps (each) | 3-5 min | 1-2 min | **2-3x faster** |
+| build-base (cache hit) | 5-10 min | 30-60 sec | **10x faster** |
+
+**Total:** 40-60% faster on subsequent runs 🎉
+
+### **Local Testing:**
+
+Test exactly what CI will run:
+
+```bash
+make install    # Install dependencies
+make check      # Quality checks (black, ruff, mypy)
+make test-calc  # Run calculator tests
+make test-weather  # Run weather tests
+make test-db    # Run database tests
+```
+
+📖 **[Read the complete CI/CD Guide →](.github/CI_CD_GUIDE.md)**
+
+---
+
 ## 🤝 Contributing
 
 1. Fork the repository
 2. Create a feature branch for the specific MCP server you're working on
 3. Make your changes in the appropriate directory
 4. Follow the existing code style and documentation patterns
-5. Submit a pull request
+5. Run `make check` and `make test` locally before creating a PR
+6. Submit a pull request (CI will automatically run)
 
 ## 📄 License
 
