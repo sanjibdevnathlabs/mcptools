@@ -284,6 +284,21 @@ jobs:
     needs: [detect-mcps, compute-tags, build-mcps, quality-checks, security]
     runs-on: ubuntu-latest
     
+    # MySQL service (runs for all tests, but only database uses it)
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: test_password
+          MYSQL_DATABASE: test_mcp_db
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -ptest_password"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+        ports:
+          - 3306:3306
+    
     strategy:
       fail-fast: false
       matrix:
@@ -303,28 +318,9 @@ jobs:
       - name: Install dependencies
         run: make install
       
-      - name: Start MySQL (only for database MCP)
+      - name: Install MySQL client (only for database MCP)
         if: matrix.mcp == 'database'
-        run: |
-          docker run -d \
-            --name mysql-test \
-            -e MYSQL_ROOT_PASSWORD=test_password \
-            -e MYSQL_DATABASE=test_mcp_db \
-            -p 3306:3306 \
-            mysql:8.0
-          
-          # Wait for MySQL
-          echo "⏳ Waiting for MySQL to be ready..."
-          for i in {1..30}; do
-            if docker exec mysql-test mysqladmin ping -h localhost -ptest_password --silent 2>/dev/null; then
-              echo "✅ MySQL is ready"
-              break
-            fi
-            sleep 2
-          done
-          
-          # Initialize test database
-          mysql -h 127.0.0.1 -uroot -ptest_password < database/tests/fixtures/init_test_db.sql 2>&1 | grep -v "Warning" || true
+        run: sudo apt-get update && sudo apt-get install -y mysql-client
       
       - name: Run tests
         env:
@@ -350,12 +346,6 @@ jobs:
               exit 1
               ;;
           esac
-      
-      - name: Stop MySQL (if running)
-        if: always() && matrix.mcp == 'database'
-        run: |
-          docker stop mysql-test || true
-          docker rm mysql-test || true
   
   # ===========================================================================
   # Stage 8: Security Scans (Master only)
