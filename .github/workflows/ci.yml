@@ -187,6 +187,9 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
       
       - name: Install security tools
         run: pip install bandit safety pip-audit
@@ -330,30 +333,28 @@ jobs:
           DB_PASSWORD: test_password
           DB_DATABASE: test_mcp_db
         run: |
-          # Run make test command inside test container
+          # Run make test command inside test container (code already baked in)
+          # Don't use --rm so we can extract coverage afterward
           case "${{ matrix.mcp }}" in
             calculator)
-              docker run --rm \
-                -v $(pwd):/app \
-                -w /app \
+              docker run \
+                --name test-runner-${{ matrix.mcp }} \
                 -e APP_ENV=test \
                 $TEST_IMAGE \
                 make test-calc
               ;;
             weather)
-              docker run --rm \
+              docker run \
+                --name test-runner-${{ matrix.mcp }} \
                 --network host \
-                -v $(pwd):/app \
-                -w /app \
                 -e APP_ENV=test \
                 $TEST_IMAGE \
                 make test-weather
               ;;
             database)
-              docker run --rm \
+              docker run \
+                --name test-runner-${{ matrix.mcp }} \
                 --network host \
-                -v $(pwd):/app \
-                -w /app \
                 -e APP_ENV=test \
                 -e DB_HOST=127.0.0.1 \
                 -e DB_USER=root \
@@ -367,6 +368,12 @@ jobs:
               exit 1
               ;;
           esac
+      
+      - name: Extract coverage from container
+        if: always()
+        run: |
+          docker cp test-runner-${{ matrix.mcp }}:/app/coverage.xml ./coverage.xml || true
+          docker rm test-runner-${{ matrix.mcp }} || true
       
       - name: Stop MySQL (if running)
         if: always() && matrix.mcp == 'database'
