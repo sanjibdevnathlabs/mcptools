@@ -253,6 +253,24 @@ jobs:
             pytest-${{ runner.os }}-${{ matrix.mcp }}-
             pytest-${{ runner.os }}-
       
+      - name: Start mock weather server (if testing weather)
+        if: matrix.mcp == 'weather'
+        run: |
+          # Start mock weather server in background
+          python -m weather.mock_weather_api &
+          MOCK_SERVER_PID=$!
+          echo "MOCK_SERVER_PID=$MOCK_SERVER_PID" >> $GITHUB_ENV
+          
+          # Wait for server to be ready
+          for i in {1..30}; do
+            if curl -f http://localhost:8765/health > /dev/null 2>&1; then
+              echo "✅ Mock weather server is ready"
+              break
+            fi
+            echo "⏳ Waiting for mock server... ($i/30)"
+            sleep 1
+          done
+      
       - name: Run tests for ${{ matrix.mcp }}
         env:
           APP_ENV: test
@@ -278,6 +296,13 @@ jobs:
               exit 1
               ;;
           esac
+      
+      - name: Stop mock weather server (if running)
+        if: always() && matrix.mcp == 'weather'
+        run: |
+          if [ -n "$MOCK_SERVER_PID" ]; then
+            kill $MOCK_SERVER_PID || true
+          fi
       
       - name: Upload coverage
         uses: codecov/codecov-action@v4
