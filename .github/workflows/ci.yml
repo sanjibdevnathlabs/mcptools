@@ -277,32 +277,22 @@ jobs:
           cache-to: type=gha,mode=min
   
   # ===========================================================================
-  # Stage 7: Test MCPs (Matrix Strategy with Auto-Discovery)
+  # Stage 7a: Test Non-Database MCPs (Calculator, Weather)
   # ===========================================================================
   test-mcps:
     name: 🧪 Test ${{ matrix.mcp }}
     needs: [detect-mcps, compute-tags, build-mcps, quality-checks, security]
     runs-on: ubuntu-latest
     
-    # MySQL service (runs for all tests, but only database uses it)
-    services:
-      mysql:
-        image: mysql:8.0
-        env:
-          MYSQL_ROOT_PASSWORD: test_password
-          MYSQL_DATABASE: test_mcp_db
-        options: >-
-          --health-cmd="mysqladmin ping -h localhost -ptest_password"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=3
-        ports:
-          - 3306:3306
+    # Filter out database from matrix
+    if: |
+      contains(fromJson(needs.detect-mcps.outputs.mcps), 'calculator') || 
+      contains(fromJson(needs.detect-mcps.outputs.mcps), 'weather')
     
     strategy:
       fail-fast: false
       matrix:
-        mcp: ${{ fromJson(needs.detect-mcps.outputs.mcps) }}
+        mcp: [calculator, weather]
     
     steps:
       - uses: actions/checkout@v4
@@ -318,19 +308,10 @@ jobs:
       - name: Install dependencies
         run: make install
       
-      - name: Install MySQL client (only for database MCP)
-        if: matrix.mcp == 'database'
-        run: sudo apt-get update && sudo apt-get install -y mysql-client
-      
       - name: Run tests
         env:
           APP_ENV: test
-          DB_HOST: 127.0.0.1
-          DB_USER: root
-          DB_PASSWORD: test_password
-          DB_DATABASE: test_mcp_db
         run: |
-          # Run make test command directly on runner (like ui-config-service)
           case "${{ matrix.mcp }}" in
             calculator)
               make test-calc
@@ -338,14 +319,63 @@ jobs:
             weather)
               make test-weather
               ;;
-            database)
-              make test-db
-              ;;
             *)
               echo "⚠️ Unknown MCP: ${{ matrix.mcp }}"
               exit 1
               ;;
           esac
+  
+  # ===========================================================================
+  # Stage 7b: Test Database MCP (with MySQL service)
+  # ===========================================================================
+  test-database:
+    name: 🧪 Test database
+    needs: [detect-mcps, compute-tags, build-mcps, quality-checks, security]
+    runs-on: ubuntu-latest
+    
+    # Only run if database MCP exists
+    if: contains(fromJson(needs.detect-mcps.outputs.mcps), 'database')
+    
+    # MySQL service only for database tests
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: test_password
+          MYSQL_DATABASE: test_mcp_db
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -ptest_password"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+        ports:
+          - 3306:3306
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: |
+            requirements.txt
+            requirements-test.txt
+      
+      - name: Install dependencies
+        run: make install
+      
+      - name: Install MySQL client
+        run: sudo apt-get update && sudo apt-get install -y mysql-client
+      
+      - name: Run database tests
+        env:
+          APP_ENV: test
+          DB_HOST: 127.0.0.1
+          DB_USER: root
+          DB_PASSWORD: test_password
+          DB_DATABASE: test_mcp_db
+        run: make test-db
   
   # ===========================================================================
   # Stage 8: Security Scans (Master only)
