@@ -1,76 +1,45 @@
 #!/bin/bash
-# Auto-discovery script for MCPs in the repository
-# Detects all MCP directories by finding docker/ folders
-# Usage: ./detect-mcps.sh [output_format]
-#   output_format: json (default), space, newline, array
+# Auto-discover MCPs by scanning for docker/Dockerfile pattern
+# Returns JSON array of MCP names for GitHub Actions matrix
 
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-OUTPUT_FORMAT="${1:-json}"
+echo "🔍 Auto-discovering MCPs..."
 
-# Find all directories containing a docker/ subdirectory
-# Exclude shared/ and hidden directories
-find_mcps() {
-    find "$REPO_ROOT" -type d -name "docker" \
-        ! -path "*/shared/*" \
-        ! -path "*/.*" \
-        ! -path "*/node_modules/*" \
-        ! -path "*/venv/*" \
-        -print0 | while IFS= read -r -d '' docker_dir; do
-        # Get parent directory name (the MCP name)
-        mcp_name="$(basename "$(dirname "$docker_dir")")"
-        echo "$mcp_name"
-    done | sort -u
-}
+# Find all directories with docker/Dockerfile (excluding shared/)
+mcps=()
+for dockerfile in */docker/Dockerfile; do
+    if [ -f "$dockerfile" ]; then
+        # Extract MCP name (directory before /docker/Dockerfile)
+        mcp=$(dirname $(dirname "$dockerfile"))
+        
+        # Skip shared directory (it's the base image)
+        if [ "$mcp" != "shared" ]; then
+            mcps+=("$mcp")
+            echo "  ✅ Found MCP: $mcp"
+        fi
+    fi
+done
 
-# Get list of MCPs
-MCPS=()
-while IFS= read -r mcp; do
-    MCPS+=("$mcp")
-done < <(find_mcps)
+# Check if any MCPs were found
+if [ ${#mcps[@]} -eq 0 ]; then
+    echo "❌ Error: No MCPs discovered!"
+    echo "   Each MCP should have: <mcp>/docker/Dockerfile"
+    exit 1
+fi
 
-# Output based on format
-case "$OUTPUT_FORMAT" in
-    json)
-        # JSON array format for GitHub Actions matrix
-        printf '{"mcp":['
-        first=true
-        for mcp in "${MCPS[@]}"; do
-            if [ "$first" = true ]; then
-                first=false
-            else
-                printf ','
-            fi
-            printf '"%s"' "$mcp"
-        done
-        printf ']}'
-        ;;
-    
-    space)
-        # Space-separated for bash loops
-        printf '%s' "${MCPS[*]}"
-        ;;
-    
-    newline)
-        # Newline-separated for bash loops
-        printf '%s\n' "${MCPS[@]}"
-        ;;
-    
-    array)
-        # Bash array format
-        printf '(%s)' "${MCPS[*]}"
-        ;;
-    
-    count)
-        # Just the count
-        printf '%d' "${#MCPS[@]}"
-        ;;
-    
-    *)
-        echo "Error: Unknown output format: $OUTPUT_FORMAT" >&2
-        echo "Supported formats: json, space, newline, array, count" >&2
-        exit 1
-        ;;
-esac
+# Convert to JSON array for GitHub Actions
+json_array=$(printf '%s\n' "${mcps[@]}" | jq -R -s -c 'split("\n") | map(select(length > 0))')
 
+echo ""
+echo "📋 Discovered ${#mcps[@]} MCP(s):"
+echo "$json_array" | jq -r '.[]' | while read mcp; do
+    echo "  - $mcp"
+done
+
+# Output for GitHub Actions
+echo ""
+echo "mcps=$json_array" >> $GITHUB_OUTPUT
+
+# Also export for local testing
+echo "export DISCOVERED_MCPS='$json_array'"

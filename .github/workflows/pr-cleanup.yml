@@ -1,0 +1,85 @@
+name: PR Cleanup
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  cleanup-docker-images:
+    name: 🧹 Cleanup PR Docker Images
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.merged == true
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Compute branch hash
+        id: compute
+        run: |
+          BRANCH="${{ github.event.pull_request.head.ref }}"
+          TAG="br-$(echo -n "$BRANCH" | md5sum | cut -c1-12)"
+          echo "branch_tag=$TAG" >> $GITHUB_OUTPUT
+          echo "🏷️ Branch tag to cleanup: $TAG"
+      
+      - name: Discover MCPs
+        id: discover
+        run: |
+          chmod +x .github/scripts/detect-mcps.sh
+          .github/scripts/detect-mcps.sh
+      
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          token: ${{ secrets.DOCKERHUB_TOKEN }}
+      
+      - name: Delete base image tag
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          TAG: ${{ steps.compute.outputs.branch_tag }}
+        run: |
+          echo "🗑️ Deleting base image tag: $TAG"
+          
+          # Get JWT token for Docker Hub API
+          TOKEN=$(curl -s -H "Content-Type: application/json" -X POST \
+            -d "{\"username\": \"$DOCKERHUB_USERNAME\", \"password\": \"$DOCKERHUB_TOKEN\"}" \
+            https://hub.docker.com/v2/users/login/ | jq -r .token)
+          
+          # Delete tag (if exists)
+          curl -X DELETE \
+            -H "Authorization: JWT $TOKEN" \
+            "https://hub.docker.com/v2/repositories/${DOCKERHUB_USERNAME}/mcp-base/tags/${TAG}/" \
+            || echo "⚠️ Base image tag not found (may not have been pushed)"
+      
+      - name: Delete MCP image tags
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          TAG: ${{ steps.compute.outputs.branch_tag }}
+          MCPS: ${{ steps.discover.outputs.mcps }}
+        run: |
+          # Get JWT token for Docker Hub API
+          TOKEN=$(curl -s -H "Content-Type: application/json" -X POST \
+            -d "{\"username\": \"$DOCKERHUB_USERNAME\", \"password\": \"$DOCKERHUB_TOKEN\"}" \
+            https://hub.docker.com/v2/users/login/ | jq -r .token)
+          
+          # Delete each MCP image tag
+          echo "$MCPS" | jq -r '.[]' | while read mcp; do
+            echo "🗑️ Deleting mcp-$mcp tag: $TAG"
+            curl -X DELETE \
+              -H "Authorization: JWT $TOKEN" \
+              "https://hub.docker.com/v2/repositories/${DOCKERHUB_USERNAME}/mcp-${mcp}/tags/${TAG}/" \
+              || echo "⚠️ MCP $mcp tag not found (may not have been pushed)"
+          done
+      
+      - name: Cleanup summary
+        run: |
+          echo "✅ PR #${{ github.event.pull_request.number }} Docker images cleaned up"
+          echo "📦 Branch tag removed: ${{ steps.compute.outputs.branch_tag }}"
+          echo "🗑️ Cleaned images:"
+          echo "  - sanjibdevnath/mcp-base:${{ steps.compute.outputs.branch_tag }}"
+          echo "${{ steps.discover.outputs.mcps }}" | jq -r '.[]' | while read mcp; do
+            echo "  - sanjibdevnath/mcp-$mcp:${{ steps.compute.outputs.branch_tag }}"
+          done
+

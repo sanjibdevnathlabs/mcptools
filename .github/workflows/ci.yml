@@ -1,0 +1,362 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [main, develop, 'feature/**']
+  pull_request:
+    branches: [main, develop]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  BASE_IMAGE: sanjibdevnath/mcp-base
+  PYTHON_VERSION: '3.13'
+
+jobs:
+  # ===========================================================================
+  # Stage 1: Auto-Discover MCPs
+  # ===========================================================================
+  detect-mcps:
+    name: 🔍 Auto-Discover MCPs
+    runs-on: ubuntu-latest
+    outputs:
+      mcps: ${{ steps.discover.outputs.mcps }}
+      
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Discover MCPs
+        id: discover
+        run: |
+          chmod +x .github/scripts/detect-mcps.sh
+          .github/scripts/detect-mcps.sh
+  
+  # ===========================================================================
+  # Stage 2: Detect File Changes
+  # ===========================================================================
+  detect-changes:
+    name: 🔍 Detect Changed Files
+    needs: detect-mcps
+    runs-on: ubuntu-latest
+    outputs:
+      base_changed: ${{ steps.filter.outputs.base }}
+      mcps_changed: ${{ steps.filter.outputs.mcps }}
+      
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            base:
+              - 'requirements*.txt'
+              - 'shared/docker/**'
+            mcps:
+              - '*/docker/**'
+              - '*/src/**'
+              - '*/config/**'
+              - 'tests/**'
+  
+  # ===========================================================================
+  # Stage 3: Compute Image Tags
+  # ===========================================================================
+  compute-tags:
+    name: 🏷️ Compute Image Tags
+    runs-on: ubuntu-latest
+    outputs:
+      base_tag: ${{ steps.tags.outputs.base_tag }}
+      
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Compute tags
+        id: tags
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            # PR: Use branch hash (reused across commits in same PR)
+            BRANCH="${GITHUB_HEAD_REF}"
+            TAG="br-$(echo -n "$BRANCH" | md5sum | cut -c1-12)"
+            echo "🏷️ PR build - branch hash: $TAG"
+            echo "📝 Branch: $BRANCH"
+          else
+            # Push to branch: Use commit SHA
+            TAG="${GITHUB_SHA}"
+            echo "🏷️ Push build - commit SHA: $TAG"
+          fi
+          echo "base_tag=$TAG" >> $GITHUB_OUTPUT
+          echo "BASE_TAG=$TAG" >> $GITHUB_ENV
+  
+  # ===========================================================================
+  # Stage 4: Build Base Image
+  # ===========================================================================
+  build-base:
+    name: 🐳 Build Base Image
+    needs: [detect-changes, compute-tags]
+    if: needs.detect-changes.outputs.base_changed == 'true' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Check if base image exists
+        id: check
+        env:
+          BASE_TAG: ${{ needs.compute-tags.outputs.base_tag }}
+        run: |
+          # Check if image already exists (skip rebuild)
+          if docker manifest inspect ${{ env.BASE_IMAGE }}:$BASE_TAG > /dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "✅ Base image exists: $BASE_TAG (skip build)"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "🔨 Base image missing: $BASE_TAG (need build)"
+          fi
+      
+      - name: Set up Docker Buildx
+        if: steps.check.outputs.exists == 'false'
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Login to Docker Hub
+        if: steps.check.outputs.exists == 'false'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          token: ${{ secrets.DOCKERHUB_TOKEN }}
+      
+      - name: Docker meta
+        if: steps.check.outputs.exists == 'false'
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.BASE_IMAGE }}
+          tags: |
+            type=raw,value=${{ needs.compute-tags.outputs.base_tag }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+      
+      - name: Build and push base image
+        if: steps.check.outputs.exists == 'false'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: shared/docker/Dockerfile.base
+          platforms: ${{ github.event_name == 'pull_request' && 'linux/amd64' || 'linux/amd64,linux/arm64' }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=${{ github.event_name == 'pull_request' && 'min' || 'max' }}
+  
+  # ===========================================================================
+  # Stage 5: Code Quality Checks
+  # ===========================================================================
+  lint:
+    name: 🔍 Lint & Format Check
+    needs: detect-mcps
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install linters
+        run: |
+          pip install black isort flake8
+      
+      - name: Run Black
+        run: black --check .
+      
+      - name: Run isort
+        run: isort --check-only .
+      
+      - name: Run Flake8
+        run: |
+          # Lint all discovered MCPs
+          MCPS='${{ needs.detect-mcps.outputs.mcps }}'
+          echo "$MCPS" | jq -r '.[]' | while read mcp; do
+            echo "Linting $mcp..."
+            flake8 "$mcp/" || true
+          done
+  
+  security:
+    name: 🔒 Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install security tools
+        run: pip install bandit safety pip-audit
+      
+      - name: Run Bandit
+        run: bandit -r . -x tests,venv --format json --output bandit-report.json
+        continue-on-error: true
+      
+      - name: Run Safety
+        run: safety check --json > safety-report.json
+        continue-on-error: true
+      
+      - name: Run pip-audit
+        run: pip-audit --format json > pip-audit-report.json
+        continue-on-error: true
+  
+  # ===========================================================================
+  # Stage 6: Test MCPs (Matrix Strategy with Auto-Discovery)
+  # ===========================================================================
+  test-mcps:
+    name: 🧪 Test ${{ matrix.mcp }}
+    needs: [detect-mcps, build-base, lint, security]
+    runs-on: ubuntu-latest
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        mcp: ${{ fromJson(needs.detect-mcps.outputs.mcps) }}
+    
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: test_password
+          MYSQL_DATABASE: test_mcp_db
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+        ports:
+          - 3306:3306
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt -r requirements-test.txt
+      
+      - name: Run tests for ${{ matrix.mcp }}
+        env:
+          APP_ENV: test
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_USER: root
+          DB_PASSWORD: test_password
+          DB_DATABASE: test_mcp_db
+        run: |
+          # Test MCP-specific tests
+          pytest ${{ matrix.mcp }}/tests/ -n auto \
+            --cov=${{ matrix.mcp }} \
+            --cov-report=xml \
+            --cov-report=term-missing \
+            -v
+          
+          # Test E2E for this MCP
+          if [ -f "tests/test_e2e_${{ matrix.mcp }}.py" ]; then
+            pytest tests/test_e2e_${{ matrix.mcp }}.py -n auto -v
+          fi
+      
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        if: always()
+        with:
+          file: ./coverage.xml
+          flags: ${{ matrix.mcp }}
+          name: ${{ matrix.mcp }}-coverage
+          token: ${{ secrets.CODECOV_TOKEN }}
+        continue-on-error: true
+  
+  # ===========================================================================
+  # Stage 7: Build MCP Images (Matrix Strategy)
+  # ===========================================================================
+  build-mcps:
+    name: 🐳 Build ${{ matrix.mcp }} Image
+    needs: [detect-mcps, compute-tags, test-mcps]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        mcp: ${{ fromJson(needs.detect-mcps.outputs.mcps) }}
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          token: ${{ secrets.DOCKERHUB_TOKEN }}
+      
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: sanjibdevnath/mcp-${{ matrix.mcp }}
+          tags: |
+            type=raw,value=${{ github.sha }}
+            type=raw,value=latest
+      
+      - name: Build and push ${{ matrix.mcp }}
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ${{ matrix.mcp }}/docker/Dockerfile
+          build-args: |
+            BASE_TAG=${{ needs.compute-tags.outputs.base_tag }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+  
+  # ===========================================================================
+  # Stage 8: Security Scans (Master only)
+  # ===========================================================================
+  scan-images:
+    name: 🔒 Scan ${{ matrix.mcp }} Image
+    needs: [detect-mcps, build-mcps]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        mcp: ${{ fromJson(needs.detect-mcps.outputs.mcps) }}
+    
+    steps:
+      - name: Run Trivy scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: sanjibdevnath/mcp-${{ matrix.mcp }}:${{ github.sha }}
+          format: 'sarif'
+          output: 'trivy-${{ matrix.mcp }}.sarif'
+        continue-on-error: true
+      
+      - name: Upload to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-${{ matrix.mcp }}.sarif'
+          category: ${{ matrix.mcp }}
+        continue-on-error: true
+
