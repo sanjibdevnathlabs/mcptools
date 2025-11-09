@@ -8,20 +8,34 @@ This repository contains three self-contained MCP server applications, each with
 
 ```
 mcptools/
-├── database/           # Database MCP Server
-│   ├── config/        # Configuration classes
-│   ├── environment/   # TOML config files (default.toml, dev.toml, prod.toml)
-│   ├── src/          # Source code modules
+├── calculator/           # Calculator MCP Server
+│   ├── config/          # Configuration classes
+│   ├── environment/     # TOML config files (default.toml, dev.toml, docker.toml)
+│   ├── docker/          # Docker image definition
+│   ├── deployment/      # Docker Compose for local dev
+│   ├── tests/           # Unit and integration tests
+│   └── main.py         # Entry point
+├── database/            # Database MCP Server
+│   ├── config/         # Configuration classes
+│   ├── environment/    # TOML config files
+│   ├── src/           # Source code modules
+│   ├── docker/        # Docker image definition
+│   ├── deployment/    # Docker Compose + MySQL
+│   ├── tests/         # Unit and integration tests
 │   └── main.py       # Entry point
-├── weather/           # Weather MCP Server
-│   ├── config/       # Configuration classes
-│   ├── environment/  # TOML config files
-│   └── main.py      # Entry point
-├── calculator/        # Calculator MCP Server
-│   ├── config/       # Configuration classes
-│   ├── environment/  # TOML config files
-│   └── main.py      # Entry point
-└── requirements.txt   # Shared dependencies
+├── weather/            # Weather MCP Server
+│   ├── config/        # Configuration classes
+│   ├── environment/   # TOML config files
+│   ├── docker/        # Docker image definition
+│   ├── deployment/    # Docker Compose for local dev
+│   ├── tests/         # Unit and integration tests
+│   └── main.py       # Entry point
+├── shared/             # Shared utilities
+│   ├── config/        # Common config loader
+│   ├── logging/       # Common logging setup
+│   └── docker/        # Base Docker image
+├── tests/              # E2E tests across all MCPs
+└── requirements.txt    # Shared dependencies
 ```
 
 ## 🚀 **Core Architecture**
@@ -143,7 +157,39 @@ make test              # Run all project tests
 
 ## 🚀 Getting Started
 
-### Installation
+### Quick Start with Docker (Recommended)
+
+Each MCP has its own Docker setup for local development:
+
+```bash
+# Build all images
+make docker-build-all
+
+# Run specific MCP with docker-compose
+make docker-compose-up-calculator   # Calculator on ports 8080 (SSE) + 8081 (HTTP)
+make docker-compose-up-weather      # Weather on ports 8082 (SSE) + 8083 (HTTP)
+make docker-compose-up-database     # Database on ports 8086 (SSE) + 8087 (HTTP) + MySQL 3306
+
+# View logs
+make logs-calculator
+make logs-weather
+make logs-database
+
+# Stop services
+make docker-compose-down-calculator
+make docker-compose-down-weather
+make docker-compose-down-database
+```
+
+**Per-MCP Documentation:**
+- 📖 [Calculator Docker Guide](calculator/docker/README.md) - Build & configuration details
+- 📖 [Calculator Deployment Guide](calculator/deployment/local/README.md) - Local development with docker-compose
+- 📖 [Database Docker Guide](database/docker/README.md) - Build & configuration details
+- 📖 [Database Deployment Guide](database/deployment/local/README.md) - Local development with MySQL
+- 📖 [Weather Docker Guide](weather/docker/README.md) - Build & configuration details
+- 📖 [Weather Deployment Guide](weather/deployment/local/README.md) - Local development with API key
+
+### Installation from Source
 
 ```bash
 # Clone the repository
@@ -315,21 +361,46 @@ make fix                # Auto-fix all issues
 
 ### Makefile Commands
 
-**Essential Commands (simplified from 22 → 12):**
+**Essential Commands:**
 
 ```bash
+# Development
 make help               # Show all available commands
 make install            # Install all dependencies
 make check              # Run all quality checks
 make fix                # Auto-fix code issues
+make clean              # Clean build artifacts
+
+# Testing
 make test               # Run all tests with coverage
 make test-calc          # Test calculator (fast)
 make test-weather       # Test weather (fast)
 make test-db            # Test database (fast)
-make clean              # Clean build artifacts
-make run-database       # Run database server
-make run-weather        # Run weather server
+
+# Running Locally (Python)
 make run-calculator     # Run calculator server
+make run-weather        # Run weather server
+make run-database       # Run database server
+
+# Docker - Building Images
+make docker-build-base       # Build shared base image (~1GB, reused by all MCPs)
+make docker-build-all        # Build all MCP images
+make docker-build-calculator # Build calculator image
+make docker-build-database   # Build database image
+make docker-build-weather    # Build weather image
+
+# Docker - Local Development
+make docker-compose-up-calculator   # Start calculator (SSE + HTTP)
+make docker-compose-up-database     # Start database + MySQL (SSE + HTTP)
+make docker-compose-up-weather      # Start weather (SSE + HTTP)
+
+make docker-compose-down-calculator # Stop calculator
+make docker-compose-down-database   # Stop database + MySQL
+make docker-compose-down-weather    # Stop weather
+
+make logs-calculator   # View calculator logs
+make logs-database     # View database logs
+make logs-weather      # View weather logs
 ```
 
 ### Test Coverage
