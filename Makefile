@@ -1,6 +1,7 @@
 .PHONY: help install check fix clean test test-calc test-weather test-db run-database run-weather run-calculator \
 	docker-build-base docker-build-calculator docker-build-database docker-build-weather docker-build-all \
-	docker-compose-up-calculator docker-compose-up-database docker-compose-up-weather docker-compose-down-all \
+	docker-compose-up-calculator docker-compose-up-database docker-compose-up-weather \
+	docker-compose-down-calculator docker-compose-down-database docker-compose-down-weather docker-compose-down-all \
 	docker-push-base docker-push-calculator docker-push-database docker-push-weather docker-push-all
 
 # Automatically discover MCP server directories (directories with main.py and config/ subdirectory)
@@ -41,10 +42,13 @@ help:
 	@echo "  make docker-build-all        - Build all images (auto-discovered)"
 	@echo ""
 	@echo "🐳 Docker Compose (Local Dev):"
-	@echo "  make docker-compose-up-calculator - Start calculator services"
-	@echo "  make docker-compose-up-database   - Start database + MySQL"
-	@echo "  make docker-compose-up-weather    - Start weather services"
-	@echo "  make docker-compose-down-all      - Stop all services"
+	@echo "  make docker-compose-up-calculator   - Start calculator services"
+	@echo "  make docker-compose-up-database     - Start database + MySQL"
+	@echo "  make docker-compose-up-weather      - Start weather services"
+	@echo "  make docker-compose-down-calculator - Stop calculator services"
+	@echo "  make docker-compose-down-database   - Stop database services"
+	@echo "  make docker-compose-down-weather    - Stop weather services"
+	@echo "  make docker-compose-down-all        - Stop all services"
 	@echo ""
 	@echo "📤 Docker Push (CI/CD):"
 	@echo "  make docker-push-all         - Push all images to Docker Hub"
@@ -141,6 +145,7 @@ clean:
 	find . -type d -name ".ruff_cache" -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name "htmlcov" -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name ".coverage" -delete
+	find . -type f -name ".coverage.*" -delete
 	@echo "✅ Clean complete!"
 
 # ============================================================================
@@ -154,6 +159,7 @@ test:
 	pytest -v -n auto \
 		--cov=database --cov=weather --cov=calculator \
 		--cov-report=html --cov-report=term-missing
+	@find . -type f -name ".coverage.*" -delete 2>/dev/null || true
 	@echo ""
 	@echo "✅ Tests complete! Coverage report: htmlcov/index.html"
 
@@ -162,16 +168,19 @@ test-calc:
 	@echo "🧮 Testing calculator only (with coverage and parallelization)..."
 	pytest calculator/tests/ tests/test_e2e_calculator.py -v -n auto \
 		--cov=calculator --cov-report=term-missing
+	@find . -type f -name ".coverage.*" -delete 2>/dev/null || true
 
 test-weather:
 	@echo "🌤️  Testing weather only (with coverage and parallelization)..."
 	APP_ENV=test pytest weather/tests/ tests/test_e2e_weather.py -v -n auto \
 		--cov=weather --cov-report=term-missing
+	@find . -type f -name ".coverage.*" -delete 2>/dev/null || true
 
 test-db:
 	@echo "🗄️  Testing database only (with coverage and parallelization)..."
 	APP_ENV=test pytest database/tests/ tests/test_e2e_database.py -v -n auto \
 		--cov=database --cov-report=term-missing
+	@find . -type f -name ".coverage.*" -delete 2>/dev/null || true
 
 # ============================================================================
 # Run MCP Servers
@@ -260,8 +269,8 @@ docker-build-all: docker-build-base
 # ============================================================================
 
 docker-compose-up-calculator:
-	@echo "🧮 Starting calculator services..."
-	cd calculator/deployment/local && docker-compose up -d
+	@echo "🧮 Starting calculator services (will rebuild if needed)..."
+	cd calculator/deployment/local && docker-compose up -d --build
 	@echo "✅ Calculator services started!"
 	@echo "   - SSE:    http://localhost:8080"
 	@echo "   - HTTP:   http://localhost:8081/mcp"
@@ -269,8 +278,8 @@ docker-compose-up-calculator:
 	@echo "   - Logs:   docker logs -f calculator"
 
 docker-compose-up-database:
-	@echo "🗄️  Starting database services (includes MySQL)..."
-	cd database/deployment/local && docker-compose up -d
+	@echo "🗄️  Starting database services (includes MySQL, will rebuild if needed)..."
+	cd database/deployment/local && docker-compose up -d --build
 	@echo "✅ Database services started!"
 	@echo "   - MySQL: localhost:3306 (root/testpassword)"
 	@echo "   - STDIO: docker-compose -f database/deployment/local/docker-compose.yml logs -f database-stdio"
@@ -278,12 +287,26 @@ docker-compose-up-database:
 	@echo "   - HTTP:  http://localhost:8083 (docker-compose -f database/deployment/local/docker-compose.yml logs -f database-http)"
 
 docker-compose-up-weather:
-	@echo "🌤️  Starting weather services..."
-	cd weather/deployment/local && docker-compose up -d
+	@echo "🌤️  Starting weather services (will rebuild if needed)..."
+	cd weather/deployment/local && docker-compose up -d --build
 	@echo "✅ Weather services started!"
-	@echo "   - STDIO: docker-compose -f weather/deployment/local/docker-compose.yml logs -f weather-stdio"
-	@echo "   - SSE:   http://localhost:8084 (docker-compose -f weather/deployment/local/docker-compose.yml logs -f weather-sse)"
-	@echo "   - HTTP:  http://localhost:8085 (docker-compose -f weather/deployment/local/docker-compose.yml logs -f weather-http)"
+	@echo "   - SSE:   http://localhost:8082 (docker-compose -f weather/deployment/local/docker-compose.yml logs -f weather-sse)"
+	@echo "   - HTTP:  http://localhost:8083 (docker-compose -f weather/deployment/local/docker-compose.yml logs -f weather-http)"
+
+docker-compose-down-calculator:
+	@echo "🛑 Stopping calculator services..."
+	cd calculator/deployment/local && docker-compose down
+	@echo "✅ Calculator services stopped!"
+
+docker-compose-down-database:
+	@echo "🛑 Stopping database services..."
+	cd database/deployment/local && docker-compose down
+	@echo "✅ Database services stopped!"
+
+docker-compose-down-weather:
+	@echo "🛑 Stopping weather services..."
+	cd weather/deployment/local && docker-compose down
+	@echo "✅ Weather services stopped!"
 
 docker-compose-down-all:
 	@echo "🛑 Stopping all Docker Compose services..."

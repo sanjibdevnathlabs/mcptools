@@ -1,0 +1,6 @@
+# Weather MCP Server - Docker Environment
+# This configuration is used when APP_ENV=docker (in containers)
+
+[logger]
+format = "json"  # Override for container logging
+
