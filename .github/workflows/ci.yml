@@ -204,154 +204,11 @@ jobs:
         continue-on-error: true
   
   # ===========================================================================
-  # Stage 6: Test MCPs (Matrix Strategy with Auto-Discovery)
-  # ===========================================================================
-  test-mcps:
-    name: 🧪 Test ${{ matrix.mcp }}
-    needs: [detect-mcps, compute-tags, build-base, quality-checks, security]
-    runs-on: ubuntu-latest
-    
-    strategy:
-      fail-fast: false
-      matrix:
-        mcp: ${{ fromJson(needs.detect-mcps.outputs.mcps) }}
-    
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Pull base image and build test image
-        env:
-          BASE_TAG: ${{ needs.compute-tags.outputs.base_tag }}
-        run: |
-          echo "🐳 Pulling base image: ${{ env.BASE_IMAGE }}:$BASE_TAG"
-          docker pull ${{ env.BASE_IMAGE }}:$BASE_TAG
-          
-          echo "🔨 Building test image for ${{ matrix.mcp }}"
-          docker build \
-            -f ${{ matrix.mcp }}/docker/Dockerfile.test \
-            --build-arg BASE_TAG=$BASE_TAG \
-            -t mcp-${{ matrix.mcp }}-test:ci \
-            .
-      
-      - name: Start MySQL server (if testing database)
-        if: matrix.mcp == 'database'
-        run: |
-          # Start MySQL in Docker
-          docker run -d \
-            --name mysql-test \
-            -e MYSQL_ROOT_PASSWORD=test_password \
-            -e MYSQL_DATABASE=test_mcp_db \
-            -p 3306:3306 \
-            mysql:8.0
-          
-          # Wait for MySQL to be ready
-          echo "⏳ Waiting for MySQL to be ready..."
-          for i in {1..30}; do
-            if docker exec mysql-test mysqladmin ping -h localhost -ptest_password --silent; then
-              echo "✅ MySQL is ready"
-              break
-            fi
-            echo "⏳ Waiting for MySQL... ($i/30)"
-            sleep 2
-          done
-      
-      - name: Start mock weather server (if testing weather)
-        if: matrix.mcp == 'weather'
-        run: |
-          # Start mock weather server using test image
-          docker run -d \
-            --name mock-weather \
-            --network host \
-            mcp-weather-test:ci \
-            python -m weather.mock_weather_api
-          
-          # Wait for server to be ready
-          for i in {1..30}; do
-            if curl -f http://localhost:8765/health > /dev/null 2>&1; then
-              echo "✅ Mock weather server is ready"
-              break
-            fi
-            echo "⏳ Waiting for mock server... ($i/30)"
-            sleep 1
-          done
-      
-      - name: Run tests for ${{ matrix.mcp }}
-        env:
-          APP_ENV: test
-          DB_HOST: 127.0.0.1
-          DB_PORT: 3306
-          DB_USER: root
-          DB_PASSWORD: test_password
-          DB_DATABASE: test_mcp_db
-        run: |
-          # Run tests using test Docker images (includes quality checks + tests)
-          case "${{ matrix.mcp }}" in
-            calculator)
-              docker run --rm \
-                --network host \
-                -e APP_ENV=test \
-                mcp-calculator-test:ci
-              ;;
-            weather)
-              docker run --rm \
-                --network host \
-                -e APP_ENV=test \
-                mcp-weather-test:ci
-              ;;
-            database)
-              # Initialize database first
-              docker exec mysql-test mysql -uroot -ptest_password < database/tests/fixtures/init_test_db.sql 2>&1 | grep -v "Warning" || true
-              
-              docker run --rm \
-                --network host \
-                -e APP_ENV=test \
-                -e DB_HOST=127.0.0.1 \
-                -e DB_USER=root \
-                -e DB_PASSWORD=test_password \
-                mcp-database-test:ci
-              ;;
-            *)
-              echo "⚠️ Unknown MCP: ${{ matrix.mcp }}"
-              exit 1
-              ;;
-          esac
-      
-      - name: Copy coverage from container (if needed)
-        run: |
-          # Coverage files are generated inside containers, copy them out
-          docker create --name temp-coverage mcp-${{ matrix.mcp }}-test:ci
-          docker cp temp-coverage:/app/coverage.xml ./coverage.xml || true
-          docker rm temp-coverage || true
-      
-      - name: Stop mock weather server (if running)
-        if: always() && matrix.mcp == 'weather'
-        run: |
-          docker stop mock-weather || true
-          docker rm mock-weather || true
-      
-      - name: Stop MySQL server (if running)
-        if: always() && matrix.mcp == 'database'
-        run: |
-          docker stop mysql-test || true
-          docker rm mysql-test || true
-      
-      - name: Upload coverage
-        uses: codecov/codecov-action@v4
-        if: always()
-        with:
-          file: ./coverage.xml
-          flags: ${{ matrix.mcp }}
-          name: ${{ matrix.mcp }}-coverage
-          token: ${{ secrets.CODECOV_TOKEN }}
-        continue-on-error: true
-  
-  # ===========================================================================
-  # Stage 7: Build MCP Images (Matrix Strategy)
+  # Stage 6: Build MCP Images (Matrix Strategy) - Build on PRs and Master
   # ===========================================================================
   build-mcps:
     name: 🐳 Build ${{ matrix.mcp }} Image
-    needs: [detect-mcps, compute-tags, test-mcps]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    needs: [detect-mcps, compute-tags, build-base]
     runs-on: ubuntu-latest
     
     strategy:
@@ -377,8 +234,8 @@ jobs:
         with:
           images: sanjibdevnath/mcp-${{ matrix.mcp }}
           tags: |
-            type=raw,value=${{ github.sha }}
-            type=raw,value=latest
+            type=raw,value=${{ needs.compute-tags.outputs.base_tag }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/master' }}
       
       - name: Build and push ${{ matrix.mcp }}
         uses: docker/build-push-action@v5
@@ -393,6 +250,73 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+  
+  # ===========================================================================
+  # Stage 7: Test MCPs (Matrix Strategy with Auto-Discovery)
+  # ===========================================================================
+  test-mcps:
+    name: 🧪 Test ${{ matrix.mcp }}
+    needs: [detect-mcps, compute-tags, build-mcps, quality-checks, security]
+    runs-on: ubuntu-latest
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        mcp: ${{ fromJson(needs.detect-mcps.outputs.mcps) }}
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Make
+        run: sudo apt-get update && sudo apt-get install -y make
+      
+      - name: Pull MCP production images
+        env:
+          BASE_TAG: ${{ needs.compute-tags.outputs.base_tag }}
+          MCP_IMAGE: sanjibdevnath/mcp-${{ matrix.mcp }}:${{ needs.compute-tags.outputs.base_tag }}
+        run: |
+          echo "🐳 Pulling production MCP image: $MCP_IMAGE"
+          docker pull $MCP_IMAGE
+          
+          # Tag for docker-compose compatibility with deployment configs
+          docker tag $MCP_IMAGE mcp-${{ matrix.mcp }}:local-sse
+          docker tag $MCP_IMAGE mcp-${{ matrix.mcp }}:local-http
+      
+      - name: Run tests using make docker-test command
+        env:
+          APP_ENV: test
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_USER: root
+          DB_PASSWORD: test_password
+          DB_DATABASE: test_mcp_db
+        run: |
+          # Run tests using Makefile commands (consistent with local development)
+          case "${{ matrix.mcp }}" in
+            calculator)
+              make docker-test-calculator
+              ;;
+            weather)
+              make docker-test-weather
+              ;;
+            database)
+              make docker-test-database
+              ;;
+            *)
+              echo "⚠️ Unknown MCP: ${{ matrix.mcp }}"
+              exit 1
+              ;;
+          esac
+      
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        if: always()
+        with:
+          file: ./coverage.xml
+          flags: ${{ matrix.mcp }}
+          name: ${{ matrix.mcp }}-coverage
+          token: ${{ secrets.CODECOV_TOKEN }}
+        continue-on-error: true
   
   # ===========================================================================
   # Stage 8: Security Scans (Master only)
