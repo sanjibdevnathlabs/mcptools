@@ -448,56 +448,94 @@ jobs:
           
           FAILED=0
           
+          # Initialize summary
+          echo "# 🎯 CI/CD Pipeline Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status | Details |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|---------|" >> $GITHUB_STEP_SUMMARY
+          
           # Check quality checks (auto-scales with matrix)
           if [[ "${{ needs.quality-checks.result }}" != "success" ]]; then
             echo "❌ Quality checks failed (black + ruff + mypy)"
+            echo "| 🔍 Code Quality | ❌ Failed | black + ruff + mypy |" >> $GITHUB_STEP_SUMMARY
             FAILED=1
           else
             echo "✅ Quality checks passed"
+            echo "| 🔍 Code Quality | ✅ Passed | black + ruff + mypy |" >> $GITHUB_STEP_SUMMARY
           fi
           
           # Check security scan
           if [[ "${{ needs.security.result }}" != "success" ]]; then
             echo "❌ Security scan failed (bandit + safety + pip-audit)"
+            echo "| 🛡️ Security Scan | ❌ Failed | bandit + safety + pip-audit |" >> $GITHUB_STEP_SUMMARY
             FAILED=1
           else
             echo "✅ Security scan passed"
+            echo "| 🛡️ Security Scan | ✅ Passed | bandit + safety + pip-audit |" >> $GITHUB_STEP_SUMMARY
           fi
           
           # Check builds (auto-scales with matrix, can be skipped on PRs with no base changes)
           if [[ "${{ needs.build-mcps.result }}" == "success" ]]; then
             echo "✅ Docker builds passed"
+            echo "| 🐳 Docker Builds | ✅ Passed | All MCP images built |" >> $GITHUB_STEP_SUMMARY
           elif [[ "${{ needs.build-mcps.result }}" == "skipped" ]]; then
             echo "⏭️  Docker builds skipped (no base changes or PR)"
+            echo "| 🐳 Docker Builds | ⏭️ Skipped | No base changes |" >> $GITHUB_STEP_SUMMARY
           else
             echo "❌ Docker builds failed"
+            echo "| 🐳 Docker Builds | ❌ Failed | Check build logs |" >> $GITHUB_STEP_SUMMARY
             FAILED=1
           fi
           
           # Check non-database tests (auto-scales with matrix, can be skipped if no file changes)
           if [[ "${{ needs.test-mcps.result }}" == "success" ]]; then
             echo "✅ MCP tests passed"
+            echo "| 🧪 MCP Tests | ✅ Passed | calculator, weather, etc. |" >> $GITHUB_STEP_SUMMARY
           elif [[ "${{ needs.test-mcps.result }}" == "skipped" ]]; then
             echo "⏭️  MCP tests skipped (no relevant file changes)"
+            echo "| 🧪 MCP Tests | ⏭️ Skipped | No relevant changes |" >> $GITHUB_STEP_SUMMARY
           else
             echo "❌ MCP tests failed (calculator, weather, etc.)"
+            echo "| 🧪 MCP Tests | ❌ Failed | Check test logs |" >> $GITHUB_STEP_SUMMARY
             FAILED=1
           fi
           
           # Check database tests (may be skipped if database MCP doesn't exist)
           if [[ "${{ needs.test-database.result }}" == "success" ]]; then
             echo "✅ Database tests passed"
+            echo "| 🗄️ Database Tests | ✅ Passed | All tests passed |" >> $GITHUB_STEP_SUMMARY
           elif [[ "${{ needs.test-database.result }}" == "skipped" ]]; then
             echo "⏭️  Database tests skipped (no database MCP)"
+            echo "| 🗄️ Database Tests | ⏭️ Skipped | No database MCP |" >> $GITHUB_STEP_SUMMARY
           else
             echo "❌ Database tests failed"
+            echo "| 🗄️ Database Tests | ❌ Failed | Check test logs |" >> $GITHUB_STEP_SUMMARY
             FAILED=1
           fi
           
-          echo ""
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "" 
+          
           if [ $FAILED -eq 1 ]; then
+            echo "## ❌ Pipeline Failed" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Some required checks failed. Please review the logs above." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### 🔗 Quick Links" >> $GITHUB_STEP_SUMMARY
+            echo "- [View Failed Jobs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
+            echo "- [Commit Details](https://github.com/${{ github.repository }}/commit/${{ github.sha }})" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
             echo "❌ Some required checks failed!"
             exit 1
           fi
           
+          echo "## ✅ All Checks Passed!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "🎉 Your PR is ready to merge!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📊 Pipeline Stats" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch:** \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Triggered by:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
           echo "✅ All required checks passed! PR is ready to merge."
