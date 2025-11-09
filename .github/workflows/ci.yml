@@ -78,9 +78,9 @@ jobs:
         id: tags
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            # PR: Use branch hash (reused across commits in same PR)
+            # PR: Use full branch hash (reused across commits in same PR)
             BRANCH="${GITHUB_HEAD_REF}"
-            TAG="br-$(echo -n "$BRANCH" | md5sum | cut -c1-12)"
+            TAG="br-$(echo -n "$BRANCH" | md5sum | awk '{print $1}')"
             echo "🏷️ PR build - branch hash: $TAG"
             echo "📝 Branch: $BRANCH"
           else

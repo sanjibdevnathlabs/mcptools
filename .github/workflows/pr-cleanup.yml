@@ -17,7 +17,7 @@ jobs:
         id: compute
         run: |
           BRANCH="${{ github.event.pull_request.head.ref }}"
-          TAG="br-$(echo -n "$BRANCH" | md5sum | cut -c1-12)"
+          TAG="br-$(echo -n "$BRANCH" | md5sum | awk '{print $1}')"
           echo "branch_tag=$TAG" >> $GITHUB_OUTPUT
           echo "🏷️ Branch tag to cleanup: $TAG"
       
