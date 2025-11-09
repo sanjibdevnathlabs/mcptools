@@ -11,32 +11,31 @@ LABEL org.opencontainers.image.vendor="sanjibdevnath"
 LABEL org.opencontainers.image.source="https://github.com/sanjibdevnathlabs/mcptools"
 LABEL mcp.name="calculator"
 LABEL mcp.version="1.0.0"
-LABEL mcp.transports="stdio,sse,http"
+LABEL mcp.transports="sse,streamable-http"
 
-# Copy only calculator-specific code
+# Copy shared modules (required by calculator)
+COPY shared/ /app/shared/
+
+# Copy calculator-specific code
 COPY calculator/ /app/calculator/
 COPY tests/__init__.py tests/conftest.py tests/test_e2e_calculator.py /app/tests/
 
 # Set working directory
 WORKDIR /app
 
-# Expose ports: 8080 (SSE), 8081 (HTTP), 9090 (Health/Metrics)
-EXPOSE 8080 8081 9090
-
-# Health check via ops port
-HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-  CMD curl -f http://localhost:9090/health || exit 1
+# Expose ports for SSE and HTTP transports
+# Actual port used depends on TRANSPORT_MODE environment variable
+EXPOSE 8080 8081
 
 # Environment defaults
-ENV MCP_NAME=calculator \
-    TRANSPORT_MODE=stdio \
-    LOG_LEVEL=INFO \
+# Use docker environment configuration (environment/docker.toml)
+# TRANSPORT_MODE will be set by docker-compose per service (sse or streamable-http)
+ENV APP_ENV=docker \
+    TRANSPORT_MODE=sse \
     FASTMCP_HOST=0.0.0.0 \
-    FASTMCP_PORT=8080
+    FASTMCP_PORT=8080 \
+    LOG_LEVEL=INFO
 
-# Entry point
+# Entry point - runs the calculator server
+# Config system will load environment/docker.toml when APP_ENV=docker
 ENTRYPOINT ["python", "-m", "calculator"]
-
-# Default command (shows help)
-CMD ["--help"]
-

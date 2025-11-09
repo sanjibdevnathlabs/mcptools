@@ -1,223 +1,384 @@
-# Calculator MCP - Local Development (Single-Pod Architecture)
+# Calculator MCP - Local Docker Deployment
 
-Production-ready Docker Compose setup for the Calculator MCP with unified transport management.
+Local development deployment using Docker Compose with separate containers for SSE and HTTP transports.
 
 ## 🏗️ Architecture
 
-**Single Pod with Multiple Transports:**
+This deployment runs **two separate containers** from the same Docker image:
+
 ```
-┌─────────────────────────────────────┐
-│     Calculator MCP (Single Pod)     │
-│                                     │
-│  Port 8080 → SSE Transport          │
-│  Port 8081 → HTTP Transport         │
-│  Port 9090 → Health + Metrics       │
-└─────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│                  Docker Network                          │
+│                 (mcp-local-network)                      │
+├─────────────────────────────────────────────────────────┤
+│                                                          │
+│  ┌──────────────────────┐   ┌──────────────────────┐   │
+│  │  calculator-sse      │   │  calculator-http     │   │
+│  │                      │   │                      │   │
+│  │  Transport: SSE      │   │  Transport: HTTP     │   │
+│  │  Port: 8080          │   │  Port: 8081          │   │
+│  │  Logs: JSON to file  │   │  Logs: JSON to file  │   │
+│  └──────────────────────┘   └──────────────────────┘   │
+│                                                          │
+└─────────────────────────────────────────────────────────┘
 ```
 
 ## 🚀 Quick Start
 
-### Start Calculator Service
+### Prerequisites
+
+- Docker Engine 20.10+
+- Docker Compose 2.0+
+- curl (for health checks)
+
+### Start All Services
 
 ```bash
-# From repo root
+# From project root
 cd calculator/deployment/local
-
-# Build and start
 docker-compose up -d
 
 # View logs
-docker-compose logs -f calculator
+docker-compose logs -f
+
+# Check service health
+docker-compose ps
 ```
 
-Or use the Makefile:
-```bash
-# From repo root
-make docker-compose-up-calculator
-```
-
-## 🎯 Available Endpoints
-
-| Endpoint | Port | Purpose |
-|----------|------|---------|
-| **SSE Transport** | 8080 | `http://localhost:8080/sse` |
-| **HTTP Transport** | 8081 | `http://localhost:8081/mcp` |
-| **Health Check** | 9090 | `http://localhost:9090/health` |
-| **Metrics** | 9090 | `http://localhost:9090/metrics` |
-
-## 🔍 Health Check
-
-The unified health endpoint reports the status of **both** transports:
+### Start Individual Services
 
 ```bash
-curl http://localhost:9090/health
+# Start only SSE transport
+docker-compose up -d calculator-sse
+
+# Start only HTTP transport
+docker-compose up -d calculator-http
 ```
 
-**Response:**
-```json
-{
-    "healthy": true,
-    "service": "calculator-mcp",
-    "version": "1.0.0",
-    "transports": {
-        "sse": {"healthy": true},
-        "http": {"healthy": true}
-    }
-}
-```
-
-- **200 OK**: All transports healthy
-- **503 Service Unavailable**: One or more transports unhealthy
-
-## 📊 Metrics
-
-Prometheus-compatible metrics endpoint (placeholder for future implementation):
+### Stop Services
 
 ```bash
-curl http://localhost:9090/metrics
-```
-
-Future format will include transport-level cardinality:
-```prometheus
-calculator_mcp_requests_total{transport="sse"} 150
-calculator_mcp_requests_total{transport="http"} 300
-```
-
-## 🧪 Testing
-
-### Test with MCP Inspector
-
-1. Start MCP Inspector (if not already running)
-2. Connect to SSE:
-   - Transport: **SSE**
-   - URL: `http://localhost:8080/sse`
-
-3. Connect to HTTP:
-   - Transport: **Streamable HTTP**
-   - URL: `http://localhost:8081/mcp`
-
-### Test with curl
-
-**List Tools (HTTP):**
-```bash
-echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | \
-  curl -s -X POST http://localhost:8081/mcp/ \
-  -H "Content-Type: application/json" -d @-
-```
-
-**Execute Tool:**
-```bash
-echo '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"add","arguments":{"a":10,"b":5}}}' | \
-  curl -s -X POST http://localhost:8081/mcp/ \
-  -H "Content-Type: application/json" -d @-
-```
-
-## 🛑 Stop Service
-
-```bash
-# Using docker-compose
-cd calculator/deployment/local
+# Stop all services
 docker-compose down
 
-# Or using Makefile
-make docker-compose-down-all
+# Stop and remove volumes
+docker-compose down -v
 ```
 
-## 🐳 Docker Image
+## 📊 Service Configuration
 
-**Image:** `mcp-calculator:local`
+### calculator-sse (Port 8080)
 
-**Exposed Ports:**
-- 8080 (SSE)
-- 8081 (HTTP)
-- 9090 (Admin)
+**Purpose**: SSE (Server-Sent Events) transport for streaming responses
 
-**Health Check:**
-```dockerfile
-HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-  CMD curl -f http://localhost:9090/health || exit 1
+**Configuration**:
+```yaml
+environment:
+  - APP_ENV=docker
+  - TRANSPORT_MODE=sse
+  - FASTMCP_HOST=0.0.0.0
+  - FASTMCP_PORT=8080
+  - LOG_LEVEL=DEBUG
 ```
 
-## 📦 Production Deployment
+**Health Check**: TCP connection to port 8080 (Python socket check)
 
-This architecture is production-ready for Kubernetes:
+**Test Connection**:
+```bash
+# Test if port is open and accepting connections
+python -c "import socket; s=socket.socket(); s.connect(('localhost',8080)); s.close(); print('✅ Port 8080 is open')"
+```
+
+### calculator-http (Port 8081)
+
+**Purpose**: Streamable HTTP transport for request-response
+
+**Configuration**:
+```yaml
+environment:
+  - APP_ENV=docker
+  - TRANSPORT_MODE=streamable-http
+  - FASTMCP_HOST=0.0.0.0
+  - FASTMCP_PORT=8081
+  - LOG_LEVEL=DEBUG
+```
+
+**Health Check**: TCP connection to port 8081 (Python socket check)
+
+**Test Connection**:
+```bash
+# Test if port is open and accepting connections
+python -c "import socket; s=socket.socket(); s.connect(('localhost',8081)); s.close(); print('✅ Port 8081 is open')"
+```
+
+## 🔧 Development Workflow
+
+### Building the Image
+
+```bash
+# Build from project root
+docker-compose build
+
+# Build without cache
+docker-compose build --no-cache
+
+# Build specific service
+docker-compose build calculator-sse
+```
+
+### Viewing Logs
+
+```bash
+# All services
+docker-compose logs -f
+
+# Specific service
+docker-compose logs -f calculator-sse
+docker-compose logs -f calculator-http
+
+# Last 50 lines
+docker-compose logs --tail=50 calculator-sse
+```
+
+### Accessing Container
+
+```bash
+# Execute command in running container
+docker-compose exec calculator-sse /bin/bash
+
+# Run one-off command
+docker-compose run --rm calculator-sse python --version
+```
+
+### Testing Inside Container
+
+```bash
+# Run tests in SSE container
+docker-compose exec calculator-sse pytest calculator/tests/ -v
+
+# Run tests in HTTP container
+docker-compose exec calculator-http pytest calculator/tests/ -v
+```
+
+## 🐛 Troubleshooting
+
+### Service Won't Start
+
+**Check logs**:
+```bash
+docker-compose logs calculator-sse
+```
+
+**Common issues**:
+1. Port already in use
+   ```bash
+   # Check what's using the port
+   lsof -i :8080
+   lsof -i :8081
+   ```
+
+2. Image not built
+   ```bash
+   docker-compose build
+   ```
+
+3. Network issues
+   ```bash
+   docker network ls
+   docker network inspect mcp-local-network
+   ```
+
+### Health Check Failing
+
+**Check service status**:
+```bash
+docker-compose ps
+```
+
+**Verify port is listening**:
+```bash
+# From host
+python -c "import socket; s=socket.socket(); s.connect(('localhost',8080)); s.close(); print('✅ Port 8080 is healthy')"
+
+# From inside container
+docker-compose exec calculator-sse python -c "import socket; s=socket.socket(); s.connect(('localhost',8080)); s.close(); print('✅ Port 8080 is healthy')"
+```
+
+### Logs Not Appearing
+
+**Check log configuration**:
+- Logs are written to files in Docker (not stdout when in docker environment)
+- Check `environment/docker.toml` for log settings
+
+**Access log files**:
+```bash
+# Copy logs from container
+docker cp calculator-sse:/app/logs/calculator.log ./calculator-sse.log
+docker cp calculator-http:/app/logs/calculator.log ./calculator-http.log
+
+# Tail log file inside container
+docker-compose exec calculator-sse tail -f /app/logs/calculator.log
+```
+
+## 🔐 Environment Variables
+
+### Required Variables
+
+| Variable | Description | Default | Example |
+|----------|-------------|---------|---------|
+| `APP_ENV` | Environment name | `docker` | `docker`, `dev`, `prod` |
+| `TRANSPORT_MODE` | Transport protocol | `sse` | `sse`, `streamable-http` |
+| `FASTMCP_HOST` | Server bind address | `0.0.0.0` | `0.0.0.0`, `127.0.0.1` |
+| `FASTMCP_PORT` | Server port | `8080` | `8080`, `8081` |
+| `LOG_LEVEL` | Logging level | `INFO` | `DEBUG`, `INFO`, `WARNING` |
+
+### Optional Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `LOG_FORMAT` | Log format | `json` (from docker.toml) |
+| `LOG_DESTINATION` | Log destination | `file` (forced for docker) |
+| `LOG_FILE_PATH` | Log file path | `logs/calculator.log` |
+
+## 📁 Volume Mounts
+
+### Development Mode
+
+For development with live reload, mount source code:
 
 ```yaml
-apiVersion: v1
-kind: Service
-metadata:
-  name: calculator-mcp
-spec:
-  ports:
-    - name: sse
-      port: 8080
-    - name: http
-      port: 8081
-    - name: admin
-      port: 9090
-  selector:
-    app: calculator-mcp
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: calculator-mcp
-spec:
-  replicas: 3
-  template:
-    spec:
-      containers:
-      - name: calculator
-        image: mcp-calculator:latest
-        ports:
-        - containerPort: 8080
-          name: sse
-        - containerPort: 8081
-          name: http
-        - containerPort: 9090
-          name: admin
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 9090
-          initialDelaySeconds: 10
-          periodSeconds: 30
-        readinessProbe:
-          httpGet:
-            path: /health
-            port: 9090
-          initialDelaySeconds: 5
-          periodSeconds: 10
+services:
+  calculator-sse:
+    volumes:
+      - ../../..:/app  # Mount entire project
 ```
 
-## 🔧 Environment Variables
+**Then**:
+```bash
+docker-compose up -d
+docker-compose logs -f
+# Edit code on host, changes reflect in container
+```
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `LOG_LEVEL` | `INFO` | Logging level |
-| `FASTMCP_HOST` | `0.0.0.0` | Bind address |
+## 🔄 Restart Policies
 
-## 📝 Available Tools
+Both services use `restart: unless-stopped`:
+- Automatically restart on failure
+- Won't restart if manually stopped
+- Restart on Docker daemon restart
 
-The calculator provides 13 mathematical operations:
-- **add** - Add two numbers
-- **subtract** - Subtract two numbers
-- **multiply** - Multiply two numbers
-- **divide** - Divide two numbers
-- **power** - Power of two numbers
-- **sqrt** - Square root
-- **cbrt** - Cube root
-- **factorial** - Factorial
-- **log** - Natural logarithm
-- **remainder** - Modulo operation
-- **sin** - Sine
-- **cos** - Cosine
-- **tan** - Tangent
+**Change restart policy**:
+```yaml
+restart: always     # Always restart
+restart: on-failure # Only on failure
+restart: "no"       # Never restart
+```
 
-## 🎯 Benefits of Single-Pod Architecture
+## 🌐 Network
 
-✅ **Efficiency**: Single pod = less resource overhead
-✅ **Simplicity**: One deployment, one service definition
-✅ **Unified Health**: Single health check for all transports
-✅ **Standard Pattern**: Common in production (gRPC + HTTP)
-✅ **Easy Scaling**: `kubectl scale` scales both transports together
+**Network Name**: `mcp-local-network`
+**Driver**: `bridge`
+
+**Inspect network**:
+```bash
+docker network inspect mcp-local-network
+```
+
+**Connect external container**:
+```yaml
+services:
+  external-service:
+    networks:
+      - mcp-local-network
+
+networks:
+  mcp-local-network:
+    external: true
+```
+
+## 🧪 Testing the Deployment
+
+### Basic Connectivity Test
+
+```bash
+# Test SSE port is listening
+python -c "import socket; s=socket.socket(); s.connect(('localhost',8080)); s.close(); print('✅ SSE port 8080 is listening')"
+
+# Test HTTP port is listening
+python -c "import socket; s=socket.socket(); s.connect(('localhost',8081)); s.close(); print('✅ HTTP port 8081 is listening')"
+
+# Check container health status
+docker-compose ps
+# Both services should show "healthy" in STATUS column
+```
+
+### MCP Protocol Test
+
+**Using Playwright MCP client**:
+```python
+from mcp.client import Client
+
+# Test SSE transport
+async with Client(transport="sse", url="http://localhost:8080") as client:
+    result = await client.call_tool("add", {"a": 5, "b": 3})
+    print(result)  # 8
+
+# Test HTTP transport
+async with Client(transport="streamable-http", url="http://localhost:8081") as client:
+    result = await client.call_tool("add", {"a": 5, "b": 3})
+    print(result)  # 8
+```
+
+## 📝 Configuration Files
+
+### Dockerfile
+
+**Location**: `calculator/docker/Dockerfile`
+
+**Key Settings**:
+- Base image: `sanjibdevnath/mcp-base:latest`
+- Exposed ports: `8080`, `8081`
+- Entry point: `python -m calculator`
+- Environment: `APP_ENV=docker`
+
+### docker-compose.yml
+
+**Location**: `calculator/deployment/local/docker-compose.yml`
+
+**Services**:
+- `calculator-sse`: SSE transport on port 8080
+- `calculator-http`: HTTP transport on port 8081
+
+### Environment Config
+
+**Location**: `calculator/environment/docker.toml`
+
+**Overrides**:
+```toml
+[app]
+environment = "docker"
+
+[logger]
+format = "json"  # JSON logging for Docker
+```
+
+## 🎯 Next Steps
+
+1. **Production Deployment**: See `../production/README.md` (if exists)
+2. **Kubernetes Deployment**: See `../k8s/README.md` (if exists)
+3. **CI/CD Integration**: See `.github/workflows/` in project root
+4. **Monitoring Setup**: Add Prometheus metrics exporter
+
+## 🆘 Support
+
+**Issues**:
+- GitHub Issues: https://github.com/sanjibdevnathlabs/mcptools/issues
+- Logs: `docker-compose logs -f`
+- Health: `docker-compose ps`
+
+**Clean Slate Reset**:
+```bash
+docker-compose down -v
+docker-compose build --no-cache
+docker-compose up -d
+```

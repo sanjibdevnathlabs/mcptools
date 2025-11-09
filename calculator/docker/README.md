@@ -1,237 +1,457 @@
-# Calculator MCP Docker Image
+# Calculator MCP - Docker Image
 
-Production-ready Docker image for the Calculator MCP server with multi-transport support.
+Multi-transport MCP server for calculator operations packaged as a Docker image.
 
-## 🏗️ Architecture
+## 📦 Image Details
 
-Single container running **three concurrent servers**:
-- **Port 8080**: SSE Transport (`/sse`)
-- **Port 8081**: HTTP Transport (`/mcp`)
-- **Port 9090**: Health & Metrics (`/health`, `/metrics`)
+**Base Image**: `sanjibdevnath/mcp-base:latest`  
+**Image Name**: `mcp-calculator:local` (development) | `sanjibdevnath/mcp-calculator:latest` (production)  
+**Supported Transports**: SSE, Streamable-HTTP (stdio excluded from Docker)
 
-## 🐳 Building
+## 🏗️ Image Architecture
 
-### Using Makefile (Recommended)
+```
+┌─────────────────────────────────────────────────────────────┐
+│                  Docker Image Layers                         │
+├─────────────────────────────────────────────────────────────┤
+│ Layer 1: Base Image (Python 3.13 + common dependencies)    │
+│ Layer 2: Shared modules (config, logging)                  │
+│ Layer 3: Calculator-specific code                          │
+│ Layer 4: Test files (for in-container testing)             │
+│ Layer 5: Configuration (ENTRYPOINT, ENV)                   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## 🔧 Build Arguments
+
+### BASE_TAG
+
+Specifies which base image tag to use.
+
+**Usage**:
+```bash
+# Use latest base image
+docker build --build-arg BASE_TAG=latest -t mcp-calculator:latest .
+
+# Use specific version
+docker build --build-arg BASE_TAG=v1.0.0 -t mcp-calculator:v1.0.0 .
+
+# Use local dev base
+docker build --build-arg BASE_TAG=local-dev -t mcp-calculator:local .
+```
+
+**Default**: `latest`
+
+## 🚀 Building the Image
+
+### From Project Root
 
 ```bash
-# Build base image first
-make docker-build-base
+# Build with defaults
+docker build -f calculator/docker/Dockerfile -t mcp-calculator:local .
 
-# Build calculator image
+# Build with specific base tag
+docker build -f calculator/docker/Dockerfile \
+  --build-arg BASE_TAG=v1.0.0 \
+  -t mcp-calculator:v1.0.0 .
+
+# Build without cache
+docker build -f calculator/docker/Dockerfile \
+  --no-cache \
+  -t mcp-calculator:local .
+```
+
+### Using docker-compose
+
+```bash
+cd calculator/deployment/local
+docker-compose build
+```
+
+### Using Makefile
+
+```bash
+# From project root
 make docker-build-calculator
+
+# Build all MCPs
+make docker-build-all
 ```
 
-### Using Docker Directly
+## 🎯 Environment Variables
 
-```bash
-# Build with local-dev tag
-docker build \
-  -f calculator/docker/Dockerfile \
-  --build-arg BASE_TAG=local-dev \
-  -t mcp-calculator:local \
-  .
-```
+The image supports runtime configuration via environment variables:
 
-## 🚀 Running
+### Required Variables
 
-### Docker Run
+| Variable | Description | Default | Valid Values |
+|----------|-------------|---------|--------------|
+| `APP_ENV` | Environment name | `docker` | `dev`, `test`, `docker`, `prod` |
+| `TRANSPORT_MODE` | Transport protocol | `sse` | `sse`, `streamable-http` |
+| `FASTMCP_HOST` | Server bind address | `0.0.0.0` | Any valid IP/hostname |
+| `FASTMCP_PORT` | Server port | `8080` | `1024-65535` |
+
+### Optional Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `LOG_LEVEL` | Logging level | `INFO` |
+| `LOG_FORMAT` | Log format | `json` (from docker.toml) |
+| `LOG_DESTINATION` | Log destination | `file` (forced in Docker) |
+| `LOG_FILE_PATH` | Log file path | `logs/calculator.log` |
+
+## 🏃 Running the Image
+
+### SSE Transport
 
 ```bash
 docker run -d \
-  --name calculator \
+  --name calculator-sse \
   -p 8080:8080 \
-  -p 8081:8081 \
-  -p 9090:9090 \
+  -e TRANSPORT_MODE=sse \
+  -e FASTMCP_PORT=8080 \
   -e LOG_LEVEL=DEBUG \
   mcp-calculator:local
 ```
 
-### Docker Compose (Recommended)
+### HTTP Transport
 
-See `calculator/deployment/local/docker-compose.yml`
-
-## 📦 Image Details
-
-**Base Image:** `sanjibdevnath/mcp-base:latest`
-- Python 3.13-slim
-- Common dependencies pre-installed
-
-**Size:** ~200MB (shared base layer)
-
-**Labels:**
-```
-mcp.name=calculator
-mcp.version=1.0.0
-mcp.transports=stdio,sse,http
+```bash
+docker run -d \
+  --name calculator-http \
+  -p 8081:8081 \
+  -e TRANSPORT_MODE=streamable-http \
+  -e FASTMCP_PORT=8081 \
+  -e LOG_LEVEL=DEBUG \
+  mcp-calculator:local
 ```
 
-## 🔍 Health Check
+### Custom Configuration
 
-Built-in Docker health check via admin port:
-
-```dockerfile
-HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-  CMD curl -f http://localhost:9090/health || exit 1
+```bash
+docker run -d \
+  --name calculator-custom \
+  -p 9000:9000 \
+  -e APP_ENV=prod \
+  -e TRANSPORT_MODE=sse \
+  -e FASTMCP_HOST=0.0.0.0 \
+  -e FASTMCP_PORT=9000 \
+  -e LOG_LEVEL=WARNING \
+  mcp-calculator:local
 ```
 
-## 🌐 Ports
+## 📁 Image Contents
 
-| Port | Protocol | Endpoint |
-|------|----------|----------|
-| 8080 | SSE | `/sse` |
-| 8081 | HTTP | `/mcp` |
-| 9090 | HTTP | `/health`, `/metrics` |
+### Copied Files
 
-## 🔧 Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `MCP_NAME` | `calculator` | Service name |
-| `LOG_LEVEL` | `INFO` | Logging level (DEBUG, INFO, WARNING, ERROR) |
-| `FASTMCP_HOST` | `0.0.0.0` | Bind address |
-
-## 📊 Multi-Stage Build
-
-The Dockerfile uses a multi-stage build pattern:
-
-1. **Base Stage**: Inherits from `mcp-base` with Python 3.13 and shared dependencies
-2. **Application Stage**: Copies only calculator-specific code
-
-**Benefits:**
-- Smaller final image (shared base layer)
-- Faster builds (cached base layer)
-- Consistent environment across all MCPs
-
-## 🎯 Production Use
-
-### Kubernetes Deployment
-
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: calculator-mcp
-spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: calculator-mcp
-  template:
-    metadata:
-      labels:
-        app: calculator-mcp
-    spec:
-      containers:
-      - name: calculator
-        image: mcp-calculator:latest
-        ports:
-        - containerPort: 8080
-          name: sse
-          protocol: TCP
-        - containerPort: 8081
-          name: http
-          protocol: TCP
-        - containerPort: 9090
-          name: admin
-          protocol: TCP
-        env:
-        - name: LOG_LEVEL
-          value: "INFO"
-        resources:
-          requests:
-            memory: "128Mi"
-            cpu: "100m"
-          limits:
-            memory: "256Mi"
-            cpu: "500m"
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 9090
-          initialDelaySeconds: 10
-          periodSeconds: 30
-          timeoutSeconds: 3
-        readinessProbe:
-          httpGet:
-            path: /health
-            port: 9090
-          initialDelaySeconds: 5
-          periodSeconds: 10
-          timeoutSeconds: 3
+```
+/app/
+├── shared/                    # Shared modules
+│   ├── config/                # Config loading
+│   └── logging/               # Logging setup
+├── calculator/                # Calculator MCP code
+│   ├── __init__.py
+│   ├── __main__.py
+│   ├── main.py
+│   ├── config/                # Calculator config
+│   ├── environment/           # TOML configs
+│   └── tests/                 # Unit tests
+└── tests/                     # E2E tests
+    ├── __init__.py
+    ├── conftest.py
+    └── test_e2e_calculator.py
 ```
 
-### Service Definition
+### Exposed Ports
 
-```yaml
-apiVersion: v1
-kind: Service
-metadata:
-  name: calculator-mcp
-spec:
-  type: ClusterIP
-  ports:
-  - name: sse
-    port: 8080
-    targetPort: 8080
-  - name: http
-    port: 8081
-    targetPort: 8081
-  - name: admin
-    port: 9090
-    targetPort: 9090
-  selector:
-    app: calculator-mcp
+- `8080`: Default SSE transport
+- `8081`: Default HTTP transport
+
+**Note**: Actual port used depends on `FASTMCP_PORT` environment variable.
+
+### Working Directory
+
+`WORKDIR /app`
+
+### Entry Point
+
+```bash
+ENTRYPOINT ["python", "-m", "calculator"]
 ```
 
-## 🔐 Security
+## 🔍 Image Inspection
 
-- Runs as non-root user (`appuser`, UID 1000)
-- No secrets in image
-- Minimal attack surface (slim base)
-- Health checks prevent unhealthy pods from receiving traffic
+### View Image Labels
 
-## 📈 Monitoring
-
-### Prometheus ServiceMonitor
-
-```yaml
-apiVersion: monitoring.coreos.com/v1
-kind: ServiceMonitor
-metadata:
-  name: calculator-mcp
-spec:
-  selector:
-    matchLabels:
-      app: calculator-mcp
-  endpoints:
-  - port: admin
-    path: /metrics
-    interval: 30s
+```bash
+docker inspect mcp-calculator:local | jq '.[0].Config.Labels'
 ```
 
-## 🧪 Testing
+**Expected labels**:
+```json
+{
+  "org.opencontainers.image.title": "Calculator MCP Server",
+  "org.opencontainers.image.description": "MCP server for calculator operations",
+  "org.opencontainers.image.vendor": "sanjibdevnath",
+  "org.opencontainers.image.source": "https://github.com/sanjibdevnathlabs/mcptools",
+  "mcp.name": "calculator",
+  "mcp.version": "1.0.0",
+  "mcp.transports": "sse,streamable-http"
+}
+```
+
+### View Image Layers
+
+```bash
+docker history mcp-calculator:local
+```
+
+### View Image Size
+
+```bash
+docker images mcp-calculator:local
+```
+
+## 🧪 Testing the Image
+
+### Run Tests Inside Container
+
+```bash
+# Start container with bash
+docker run --rm -it mcp-calculator:local /bin/bash
+
+# Inside container
+pytest calculator/tests/ -v
+pytest tests/test_e2e_calculator.py -v
+```
+
+### Health Check
 
 ```bash
 # Start container
-docker run -d -p 9090:9090 -p 8080:8080 -p 8081:8081 mcp-calculator:local
+docker run -d --name calc-test -p 8080:8080 mcp-calculator:local
 
-# Test health
-curl http://localhost:9090/health
+# Check health
+curl http://localhost:8080/health
 
-# Test metrics
-curl http://localhost:9090/metrics
+# View logs
+docker logs calc-test
 
-# Test SSE (via MCP Inspector)
-# URL: http://localhost:8080/sse
-
-# Test HTTP
-echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | \
-  curl -s -X POST http://localhost:8081/mcp/ \
-  -H "Content-Type: application/json" -d @-
+# Cleanup
+docker stop calc-test && docker rm calc-test
 ```
 
-## 🔗 Related
+## 🎨 Customization
+
+### Custom Base Image
+
+```dockerfile
+# Use custom base image
+ARG BASE_TAG=custom
+FROM myregistry/mcp-base:${BASE_TAG}
+```
+
+### Additional Dependencies
+
+```dockerfile
+# Add before COPY commands
+RUN pip install additional-package==1.0.0
+```
+
+### Custom Entry Point
+
+```dockerfile
+# Override default entry point
+ENTRYPOINT ["python", "-m", "calculator", "--custom-flag"]
+```
+
+## 📊 Image Optimization
+
+### Multi-Stage Build (Already Implemented)
+
+The base image uses multi-stage build to minimize size:
+1. **Builder stage**: Install dependencies
+2. **Runtime stage**: Copy only necessary files
+
+### Size Reduction Tips
+
+1. **Use slim base images**: `python:3.13-slim`
+2. **Minimize layers**: Combine RUN commands
+3. **Remove cache**: `pip install --no-cache-dir`
+4. **Use .dockerignore**: Exclude unnecessary files
+
+### .dockerignore
+
+Create `.dockerignore` in project root:
+```
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.Python
+venv/
+*.egg-info/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+*.md
+docs/
+
+# Logs
+*.log
+logs/
+```
+
+## 🔐 Security Best Practices
+
+### 1. Non-Root User
+
+**Currently runs as root** (inherited from base image). To add non-root user:
+
+```dockerfile
+# Add before ENTRYPOINT
+RUN useradd -m -u 1000 calculator && \
+    chown -R calculator:calculator /app
+
+USER calculator
+```
+
+### 2. Minimal Permissions
+
+```bash
+# Run with read-only filesystem
+docker run --read-only \
+  --tmpfs /tmp \
+  --tmpfs /app/logs \
+  -p 8080:8080 \
+  mcp-calculator:local
+```
+
+### 3. Resource Limits
+
+```bash
+docker run -d \
+  --name calculator-sse \
+  --memory=512m \
+  --cpus=1 \
+  -p 8080:8080 \
+  mcp-calculator:local
+```
+
+## 🚢 Publishing the Image
+
+### Tag for Registry
+
+```bash
+# Tag for Docker Hub
+docker tag mcp-calculator:local sanjibdevnath/mcp-calculator:latest
+docker tag mcp-calculator:local sanjibdevnath/mcp-calculator:v1.0.0
+
+# Tag for private registry
+docker tag mcp-calculator:local myregistry.com/mcp-calculator:latest
+```
+
+### Push to Registry
+
+```bash
+# Docker Hub
+docker push sanjibdevnath/mcp-calculator:latest
+docker push sanjibdevnath/mcp-calculator:v1.0.0
+
+# Private registry
+docker push myregistry.com/mcp-calculator:latest
+```
+
+## 🔄 Image Versioning
+
+### Semantic Versioning
+
+```bash
+# Major release
+docker tag mcp-calculator:local sanjibdevnath/mcp-calculator:2.0.0
+docker tag mcp-calculator:local sanjibdevnath/mcp-calculator:2
+docker tag mcp-calculator:local sanjibdevnath/mcp-calculator:latest
+
+# Minor release
+docker tag mcp-calculator:local sanjibdevnath/mcp-calculator:1.5.0
+docker tag mcp-calculator:local sanjibdevnath/mcp-calculator:1.5
+
+# Patch release
+docker tag mcp-calculator:local sanjibdevnath/mcp-calculator:1.4.2
+```
+
+### Git SHA Tags
+
+```bash
+# Tag with git SHA
+GIT_SHA=$(git rev-parse --short HEAD)
+docker tag mcp-calculator:local sanjibdevnath/mcp-calculator:${GIT_SHA}
+```
+
+## 🐛 Troubleshooting
+
+### Build Fails
+
+**Check Docker version**:
+```bash
+docker --version
+# Requires: Docker 20.10+
+```
+
+**Check build context**:
+```bash
+# Build from project root (not calculator/)
+pwd  # Should be: /path/to/mcptools
+docker build -f calculator/docker/Dockerfile -t mcp-calculator:local .
+```
+
+### Image Too Large
+
+**Check size**:
+```bash
+docker images mcp-calculator:local
+```
+
+**Reduce size**:
+1. Use multi-stage build
+2. Remove unnecessary files
+3. Combine RUN commands
+4. Use `.dockerignore`
+
+### Runtime Errors
+
+**Check logs**:
+```bash
+docker logs <container-id>
+```
+
+**Exec into container**:
+```bash
+docker exec -it <container-id> /bin/bash
+python -c "import calculator; print('OK')"
+```
+
+## 📚 Related Documentation
 
 - **Base Image**: `shared/docker/README.md`
-- **Local Development**: `calculator/deployment/local/README.md`
-- **Calculator Source**: `calculator/main.py`
+- **Local Deployment**: `deployment/local/README.md`
+- **CI/CD**: `.github/workflows/docker.yml`
+- **Testing**: `tests/README.md`
+
+## 🆘 Support
+
+**Issues**: https://github.com/sanjibdevnathlabs/mcptools/issues  
+**Docker Hub**: https://hub.docker.com/r/sanjibdevnath/mcp-calculator

@@ -3,12 +3,19 @@
 
 [app]
 name = "calculator"
-environment = "$APP_ENV"
+environment = "${APP_ENV:-dev}"
 version = "1.0.0"
 
 [server]
 # Server configuration with environment variable support
 transport_mode = "${TRANSPORT_MODE:-stdio}"  # Options: stdio, sse, streamable-http
 host = "${FASTMCP_HOST:-127.0.0.1}"          # Server host
-port = "${FASTMCP_PORT:-8000}"               # Server port (for HTTP-based transports)
+port = "${FASTMCP_PORT:-8000}"               # Server port (for network transports)
+
+[logger]
+# Logging configuration with environment variable support
+level = "${LOG_LEVEL:-INFO}"                 # DEBUG, INFO, WARNING, ERROR, CRITICAL
+format = "${LOG_FORMAT:-text}"               # text or json
+destination = "${LOG_DESTINATION:-stdout}"   # stdout, stderr, file, both
+file_path = "${LOG_FILE_PATH:-logs/calculator.log}"  # Log file path when destination includes "file"
 

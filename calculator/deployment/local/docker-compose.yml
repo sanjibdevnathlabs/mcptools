@@ -1,28 +1,61 @@
+version: '3.8'
+
 services:
-  calculator:
+  # SSE Transport on port 8080
+  calculator-sse:
     build:
       context: ../../..
       dockerfile: calculator/docker/Dockerfile
       args:
         BASE_TAG: local-dev
     image: mcp-calculator:local
-    container_name: calculator
-    command: []  # Override default --help, run dual transport mode
+    container_name: calculator-sse
     environment:
-      - LOG_LEVEL=DEBUG
+      # Use docker environment configuration
+      - APP_ENV=docker
+      - TRANSPORT_MODE=sse
       - FASTMCP_HOST=0.0.0.0
+      - FASTMCP_PORT=8080
+      - LOG_LEVEL=DEBUG
     ports:
-      - "8080:8080"  # SSE transport
-      - "8081:8081"  # HTTP transport
-      - "9090:9090"  # Health & Metrics (ops)
+      - "8080:8080"
+    networks:
+      - mcp-network
+    restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9090/health"]
+      test: ["CMD-SHELL", "python -c \"import socket; s=socket.socket(); s.connect(('localhost',8080)); s.close()\" || exit 1"]
       interval: 10s
       timeout: 3s
       retries: 3
       start_period: 10s
+
+  # HTTP Transport on port 8081
+  calculator-http:
+    build:
+      context: ../../..
+      dockerfile: calculator/docker/Dockerfile
+      args:
+        BASE_TAG: local-dev
+    image: mcp-calculator:local
+    container_name: calculator-http
+    environment:
+      # Use docker environment configuration
+      - APP_ENV=docker
+      - TRANSPORT_MODE=streamable-http
+      - FASTMCP_HOST=0.0.0.0
+      - FASTMCP_PORT=8081
+      - LOG_LEVEL=DEBUG
+    ports:
+      - "8081:8081"
     networks:
       - mcp-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import socket; s=socket.socket(); s.connect(('localhost',8081)); s.close()\" || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
 
 networks:
   mcp-network:

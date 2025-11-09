@@ -1,6 +1,8 @@
+"""Calculator MCP Server"""
 import math
 
 from mcp.server import FastMCP
+from shared.logging import setup_logging
 
 from calculator.config import Config
 
@@ -8,8 +10,17 @@ from calculator.config import Config
 # Config system automatically interpolates ${VAR} with environment variables
 config = Config()
 
+# Setup logging using shared logging module
+# Pass transport_mode so stdio can be forced to file logging
+logger = setup_logging(config, "calculator", transport_mode=config.server.transport_mode)
+
 # Create FastMCP server using configuration
-mcp = FastMCP(config.app.name, host=config.server.host, port=config.server.port)
+# Pass host/port explicitly so FastMCP doesn't use defaults
+mcp = FastMCP(
+    config.app.name,
+    host=config.server.host,
+    port=config.server.port
+)
 
 # DEFINE TOOLS
 
@@ -108,76 +119,56 @@ def tan(a: int) -> float:
 # define resource
 @mcp.resource("greeting://{name}")
 def get_greeting(name: str) -> str:
-    return f"Hellp {name}"
-
-
-async def run_dual_transport():
-    """Run both SSE and HTTP transports simultaneously with ops port"""
-    import uvicorn
-    from calculator.src.transport import DualTransportManager
-    
-    # Create unified transport manager
-    transport_manager = DualTransportManager(
-        config=config,
-        mcp_server=mcp._mcp_server,
-        version="1.0.0"
-    )
-    
-    # Create three separate apps
-    sse_app = transport_manager.create_sse_app()
-    http_app = transport_manager.create_http_app()
-    ops_app = transport_manager.create_ops_app()
-    
-    # Configure servers
-    sse_config = uvicorn.Config(
-        sse_app,
-        host=str(config.server.host),
-        port=8080,
-        log_level="info"
-    )
-    
-    http_config = uvicorn.Config(
-        http_app,
-        host=str(config.server.host),
-        port=8081,
-        log_level="info"
-    )
-    
-    ops_config = uvicorn.Config(
-        ops_app,
-        host=str(config.server.host),
-        port=9090,
-        log_level="info"
-    )
-    
-    # Create servers
-    sse_server = uvicorn.Server(sse_config)
-    http_server = uvicorn.Server(http_config)
-    ops_server = uvicorn.Server(ops_config)
-    
-    # Run all three servers concurrently
-    import asyncio
-    await asyncio.gather(
-        sse_server.serve(),
-        http_server.serve(),
-        ops_server.serve(),
-    )
+    return f"Hello {name}"
 
 
 def main():
-    """Main entry point for calculator server."""
-    import os
-    import asyncio
+    """
+    Main entry point for calculator server.
     
-    # Check transport mode from environment (for E2E tests compatibility)
-    transport_mode = os.getenv("TRANSPORT_MODE", "dual").lower()
+    Transport mode is configured via environment variables:
+    - TRANSPORT_MODE: stdio|sse|streamable-http (default: stdio from default.toml)
+    - FASTMCP_HOST: Host to bind for network transports (default: 127.0.0.1)
+    - FASTMCP_PORT: Port to bind for network transports (default: 8000)
     
-    if transport_mode == "dual":
-        # Production mode: Run SSE + HTTP + Admin
-        asyncio.run(run_dual_transport())
-    else:
-        # Test/single mode: Use FastMCP's built-in transport handling (stdio, sse, http)
+    These are automatically loaded from environment/*.toml files and interpolated.
+    Set APP_ENV to choose environment: dev, test, docker, prod
+    
+    Note: FastMCP reads FASTMCP_HOST and FASTMCP_PORT directly from environment.
+    """
+    transport_mode = config.server.transport_mode
+    
+    # Validate transport mode
+    valid_transports = ["stdio", "sse", "streamable-http"]
+    if transport_mode not in valid_transports:
+        logger.error(
+            f"Invalid transport_mode: {transport_mode}. "
+            f"Must be one of: {', '.join(valid_transports)}"
+        )
+        raise ValueError(
+            f"Invalid transport_mode: {transport_mode}. "
+            f"Must be one of: {', '.join(valid_transports)}"
+        )
+    
+    # Log startup information
+    logger.info(f"Starting {config.app.name} MCP Server v{config.app.version}")
+    logger.info(f"Environment: {config.app.environment}")
+    logger.info(f"Transport mode: {transport_mode}")
+    
+    if transport_mode != "stdio":
+        logger.info(f"Host: {config.server.host}")
+        logger.info(f"Port: {config.server.port}")
+        logger.info(f"Server will listen on {config.server.host}:{config.server.port}")
+    
+    logger.info("Calculator MCP Server ready to accept connections")
+    
+    # FastMCP handles all transports natively
+    # Note: FastMCP reads FASTMCP_HOST and FASTMCP_PORT from environment variables
+    try:
         mcp.run(transport=transport_mode)
+    except Exception as e:
+        logger.error(f"Server failed to start: {e}", exc_info=True)
+        raise
 
 
 if __name__ == "__main__":
