@@ -308,6 +308,22 @@ jobs:
       - name: Install dependencies
         run: make install
       
+      - name: Start mock weather server (only for weather MCP)
+        if: matrix.mcp == 'weather'
+        run: |
+          python weather/mock_weather_api.py &
+          MOCK_PID=$!
+          echo "MOCK_PID=$MOCK_PID" >> $GITHUB_ENV
+          
+          # Wait for mock server to be ready
+          for i in {1..10}; do
+            if curl -s http://127.0.0.1:8765/health > /dev/null 2>&1; then
+              echo "✅ Mock weather server is ready"
+              break
+            fi
+            sleep 1
+          done
+      
       - name: Run tests
         env:
           APP_ENV: test
@@ -324,6 +340,13 @@ jobs:
               exit 1
               ;;
           esac
+      
+      - name: Stop mock weather server (only for weather MCP)
+        if: always() && matrix.mcp == 'weather'
+        run: |
+          if [ -n "$MOCK_PID" ]; then
+            kill $MOCK_PID || true
+          fi
   
   # ===========================================================================
   # Stage 7b: Test Database MCP (with MySQL service)
