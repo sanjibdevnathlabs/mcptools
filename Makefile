@@ -167,21 +167,21 @@ test:
 test-calc:
 	@echo "🧮 Testing calculator only (with coverage and parallelization)..."
 	pytest calculator/tests/ tests/calculator/ -v -n auto \
-		--cov=calculator --cov-report=term-missing
+		--cov=calculator --cov-report=term-missing --cov-report=xml
 	@find . -type f -name ".coverage.*" -delete 2>/dev/null || true
 
 test-weather:
 	@echo "🌤️  Testing weather only (with coverage and parallelization)..."
 	APP_ENV=test pytest weather/tests/ tests/weather/ -v -n auto \
-		--cov=weather --cov-report=term-missing
+		--cov=weather --cov-report=term-missing --cov-report=xml
 	@find . -type f -name ".coverage.*" -delete 2>/dev/null || true
 
 test-db:
 	@echo "🗄️  Testing database only (with coverage and parallelization)..."
 	@echo "🔧 Setting up test database..."
-	@mysql -h 127.0.0.1 -uroot -proot < database/tests/fixtures/init_test_db.sql 2>&1 | grep -v "Warning" || true
+	@mysql -h $${DB_HOST:-127.0.0.1} -u$${DB_USER:-root} -p$${DB_PASSWORD:-root} < database/tests/fixtures/init_test_db.sql 2>&1 | grep -v "Warning" || true
 	APP_ENV=test pytest database/tests/ tests/database/ -v -n auto \
-		--cov=database --cov-report=term-missing
+		--cov=database --cov-report=term-missing --cov-report=xml
 	@find . -type f -name ".coverage.*" -delete 2>/dev/null || true
 
 # ============================================================================

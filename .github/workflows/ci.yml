@@ -2,9 +2,9 @@ name: CI Pipeline
 
 on:
   push:
-    branches: [main, develop, 'feature/**']
-  pull_request:
-    branches: [main, develop]
+    branches:
+      - master  # Only trigger on commits to master
+  pull_request:  # Trigger on PR from any branch to any branch
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -136,7 +136,7 @@ jobs:
           images: ${{ env.BASE_IMAGE }}
           tags: |
             type=raw,value=${{ needs.compute-tags.outputs.base_tag }}
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/master' }}
       
       - name: Build and push base image
         if: steps.check.outputs.exists == 'false'
@@ -165,30 +165,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
       
       - name: Install dependencies
-        run: |
-          pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install -r requirements-dev.txt
+        run: make install
       
-      - name: 1️⃣ Check code formatting (black)
-        run: |
-          echo "Checking code formatting with black..."
-          black --check calculator database weather shared || \
-          (echo "❌ Format check failed. Run 'make fix' to auto-fix." && exit 1)
-      
-      - name: 2️⃣ Run linter (ruff)
-        run: |
-          echo "Running ruff linter..."
-          ruff check calculator database weather shared || \
-          (echo "❌ Lint check failed. Run 'make fix' to auto-fix." && exit 1)
-      
-      - name: 3️⃣ Run type checker (mypy)
-        run: |
-          echo "Running type checker (mypy)..."
-          mypy calculator database weather shared || \
-          (echo "❌ Type check failed. Fix type errors." && exit 1)
+      - name: Run quality checks (black + ruff + mypy)
+        run: make check
   
   security:
     name: 🔒 Security Scan
@@ -200,6 +186,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
       
       - name: Install security tools
         run: pip install bandit safety pip-audit
@@ -249,10 +236,22 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: |
+            requirements.txt
+            requirements-test.txt
       
       - name: Install dependencies
-        run: |
-          pip install -r requirements.txt -r requirements-test.txt
+        run: make install
+      
+      - name: Cache pytest
+        uses: actions/cache@v4
+        with:
+          path: .pytest_cache
+          key: pytest-${{ runner.os }}-${{ matrix.mcp }}-${{ hashFiles(format('{0}/**/*.py', matrix.mcp)) }}
+          restore-keys: |
+            pytest-${{ runner.os }}-${{ matrix.mcp }}-
+            pytest-${{ runner.os }}-
       
       - name: Run tests for ${{ matrix.mcp }}
         env:
@@ -263,17 +262,22 @@ jobs:
           DB_PASSWORD: test_password
           DB_DATABASE: test_mcp_db
         run: |
-          # Test MCP-specific unit tests
-          pytest ${{ matrix.mcp }}/tests/ -n auto \
-            --cov=${{ matrix.mcp }} \
-            --cov-report=xml \
-            --cov-report=term-missing \
-            -v
-          
-          # Test E2E for this MCP (new path structure: tests/<mcp>/)
-          if [ -d "tests/${{ matrix.mcp }}/" ]; then
-            pytest tests/${{ matrix.mcp }}/ -n auto -v
-          fi
+          # Use Makefile commands for consistency with local development
+          case "${{ matrix.mcp }}" in
+            calculator)
+              make test-calc
+              ;;
+            weather)
+              make test-weather
+              ;;
+            database)
+              make test-db
+              ;;
+            *)
+              echo "⚠️ Unknown MCP: ${{ matrix.mcp }}"
+              exit 1
+              ;;
+          esac
       
       - name: Upload coverage
         uses: codecov/codecov-action@v4
@@ -291,7 +295,7 @@ jobs:
   build-mcps:
     name: 🐳 Build ${{ matrix.mcp }} Image
     needs: [detect-mcps, compute-tags, test-mcps]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     
     strategy:
