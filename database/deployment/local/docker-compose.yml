@@ -1,0 +1,122 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: mysql-mcp
+    environment:
+      - MYSQL_ROOT_PASSWORD=testpassword
+      - MYSQL_DATABASE=mcp_db
+      - MYSQL_USER=mcp_user
+      - MYSQL_PASSWORD=mcp_password
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-ptestpassword"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks:
+      - mcp-network
+
+  database-stdio:
+    build:
+      context: ../../..
+      dockerfile: database/docker/Dockerfile
+      args:
+        BASE_TAG: local-dev
+    image: mcp-database:local-stdio
+    container_name: database-stdio
+    environment:
+      - TRANSPORT_MODE=stdio
+      - LOG_LEVEL=DEBUG
+      - DATABASE_HOST=mysql
+      - DATABASE_PORT=3306
+      - DATABASE_USER=root
+      - DATABASE_PASSWORD=testpassword
+      - DATABASE_NAME=mcp_db
+    depends_on:
+      mysql:
+        condition: service_healthy
+    stdin_open: true
+    tty: true
+    networks:
+      - mcp-network
+
+  database-sse:
+    build:
+      context: ../../..
+      dockerfile: database/docker/Dockerfile
+      args:
+        BASE_TAG: local-dev
+    image: mcp-database:local-sse
+    container_name: database-sse
+    environment:
+      - TRANSPORT_MODE=sse
+      - LOG_LEVEL=DEBUG
+      - FASTMCP_HOST=0.0.0.0
+      - FASTMCP_PORT=8081
+      - DATABASE_HOST=mysql
+      - DATABASE_PORT=3306
+      - DATABASE_USER=root
+      - DATABASE_PASSWORD=testpassword
+      - DATABASE_NAME=mcp_db
+    ports:
+      - "8082:8081"
+    command: ["--transport", "sse", "--host", "0.0.0.0", "--port", "8081"]
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    networks:
+      - mcp-network
+
+  database-http:
+    build:
+      context: ../../..
+      dockerfile: database/docker/Dockerfile
+      args:
+        BASE_TAG: local-dev
+    image: mcp-database:local-http
+    container_name: database-http
+    environment:
+      - TRANSPORT_MODE=streamable-http
+      - LOG_LEVEL=DEBUG
+      - FASTMCP_HOST=0.0.0.0
+      - FASTMCP_PORT=8081
+      - DATABASE_HOST=mysql
+      - DATABASE_PORT=3306
+      - DATABASE_USER=root
+      - DATABASE_PASSWORD=testpassword
+      - DATABASE_NAME=mcp_db
+    ports:
+      - "8083:8081"
+    command: ["--transport", "streamable-http", "--host", "0.0.0.0", "--port", "8081"]
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    networks:
+      - mcp-network
+
+volumes:
+  mysql-data:
+    name: mcp-mysql-data
+
+networks:
+  mcp-network:
+    driver: bridge
+    name: mcp-local-network
+

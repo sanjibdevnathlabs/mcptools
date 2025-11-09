@@ -38,6 +38,7 @@ log_destination = "stderr"  # CRITICAL: Must be "file" or "stderr" for STDIO tra
 # MCP server configuration
 server_name = "database-mcp"
 readonly_mode = false
+tool_mode = "${MCP_TOOL_MODE:-full}"  # "lite" (8 core tools) or "full" (22 tools including enterprise features)
 
 # Allowed query types (comma-separated string, case-insensitive)
 # 

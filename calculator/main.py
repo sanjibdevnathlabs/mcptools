@@ -111,9 +111,73 @@ def get_greeting(name: str) -> str:
     return f"Hellp {name}"
 
 
+async def run_dual_transport():
+    """Run both SSE and HTTP transports simultaneously with ops port"""
+    import uvicorn
+    from calculator.src.transport import DualTransportManager
+    
+    # Create unified transport manager
+    transport_manager = DualTransportManager(
+        config=config,
+        mcp_server=mcp._mcp_server,
+        version="1.0.0"
+    )
+    
+    # Create three separate apps
+    sse_app = transport_manager.create_sse_app()
+    http_app = transport_manager.create_http_app()
+    ops_app = transport_manager.create_ops_app()
+    
+    # Configure servers
+    sse_config = uvicorn.Config(
+        sse_app,
+        host=str(config.server.host),
+        port=8080,
+        log_level="info"
+    )
+    
+    http_config = uvicorn.Config(
+        http_app,
+        host=str(config.server.host),
+        port=8081,
+        log_level="info"
+    )
+    
+    ops_config = uvicorn.Config(
+        ops_app,
+        host=str(config.server.host),
+        port=9090,
+        log_level="info"
+    )
+    
+    # Create servers
+    sse_server = uvicorn.Server(sse_config)
+    http_server = uvicorn.Server(http_config)
+    ops_server = uvicorn.Server(ops_config)
+    
+    # Run all three servers concurrently
+    import asyncio
+    await asyncio.gather(
+        sse_server.serve(),
+        http_server.serve(),
+        ops_server.serve(),
+    )
+
+
 def main():
     """Main entry point for calculator server."""
-    mcp.run(transport=config.server.transport_mode)
+    import os
+    import asyncio
+    
+    # Check transport mode from environment (for E2E tests compatibility)
+    transport_mode = os.getenv("TRANSPORT_MODE", "dual").lower()
+    
+    if transport_mode == "dual":
+        # Production mode: Run SSE + HTTP + Admin
+        asyncio.run(run_dual_transport())
+    else:
+        # Test/single mode: Use FastMCP's built-in transport handling (stdio, sse, http)
+        mcp.run(transport=transport_mode)
 
 
 if __name__ == "__main__":

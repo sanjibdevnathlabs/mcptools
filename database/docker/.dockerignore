@@ -1,0 +1,44 @@
+# Exclude test outputs
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+htmlcov/
+.coverage
+*.log
+
+# Exclude logs directory
+logs/
+
+# Exclude environment files
+*.env
+.env.*
+!.env.example
+
+# Exclude development files
+venv/
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Exclude documentation (except README)
+*.md
+!README.md
+docs/
+
+# Exclude git
+.git/
+.gitignore
+
+# Exclude other MCPs (only include database)
+/calculator/
+/weather/
+/shared/
+
+# Exclude build artifacts
+dist/
+build/
+*.egg-info/
+

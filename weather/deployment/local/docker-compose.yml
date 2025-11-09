@@ -1,0 +1,60 @@
+services:
+  weather-sse:
+    build:
+      context: ../../..
+      dockerfile: weather/docker/Dockerfile
+      args:
+        BASE_TAG: local-dev
+    image: mcp-weather:local-sse
+    container_name: weather-sse
+    environment:
+      - TRANSPORT_MODE=sse
+      - LOG_LEVEL=DEBUG
+      - FASTMCP_HOST=0.0.0.0
+      - FASTMCP_PORT=8082
+      - WEATHER_API_ENABLED=true
+      - WEATHER_CACHE_TTL=3600
+    ports:
+      - "8084:8082"
+    command: ["--transport", "sse", "--host", "0.0.0.0", "--port", "8082"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    networks:
+      - mcp-network
+
+  weather-http:
+    build:
+      context: ../../..
+      dockerfile: weather/docker/Dockerfile
+      args:
+        BASE_TAG: local-dev
+    image: mcp-weather:local-http
+    container_name: weather-http
+    environment:
+      - TRANSPORT_MODE=streamable-http
+      - LOG_LEVEL=DEBUG
+      - FASTMCP_HOST=0.0.0.0
+      - FASTMCP_PORT=8082
+      - WEATHER_API_ENABLED=true
+      - WEATHER_CACHE_TTL=3600
+    ports:
+      - "8085:8082"
+    command: ["--transport", "streamable-http", "--host", "0.0.0.0", "--port", "8082"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    networks:
+      - mcp-network
+
+networks:
+  mcp-network:
+    driver: bridge
+    name: mcp-local-network
+

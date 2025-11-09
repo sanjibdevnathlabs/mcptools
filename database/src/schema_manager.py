@@ -859,14 +859,14 @@ class SchemaManager:
         """Get constraint information for a table."""
         query = """
         SELECT
-            CONSTRAINT_NAME as name,
-            CONSTRAINT_TYPE as constraint_type,
-            COLUMN_NAME as column_name,
-            REFERENCED_TABLE_SCHEMA as referenced_database,
-            REFERENCED_TABLE_NAME as referenced_table,
-            REFERENCED_COLUMN_NAME as referenced_column,
-            DELETE_RULE as on_delete,
-            UPDATE_RULE as on_update
+            kcu.CONSTRAINT_NAME as name,
+            tc.CONSTRAINT_TYPE as constraint_type,
+            kcu.COLUMN_NAME as column_name,
+            kcu.REFERENCED_TABLE_SCHEMA as referenced_database,
+            kcu.REFERENCED_TABLE_NAME as referenced_table,
+            kcu.REFERENCED_COLUMN_NAME as referenced_column,
+            rc.DELETE_RULE as on_delete,
+            rc.UPDATE_RULE as on_update
         FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu
         LEFT JOIN INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS rc
             ON kcu.CONSTRAINT_NAME = rc.CONSTRAINT_NAME

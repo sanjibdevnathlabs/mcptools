@@ -1,0 +1,30 @@
+services:
+  calculator:
+    build:
+      context: ../../..
+      dockerfile: calculator/docker/Dockerfile
+      args:
+        BASE_TAG: local-dev
+    image: mcp-calculator:local
+    container_name: calculator
+    command: []  # Override default --help, run dual transport mode
+    environment:
+      - LOG_LEVEL=DEBUG
+      - FASTMCP_HOST=0.0.0.0
+    ports:
+      - "8080:8080"  # SSE transport
+      - "8081:8081"  # HTTP transport
+      - "9090:9090"  # Health & Metrics (ops)
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9090/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    networks:
+      - mcp-network
+
+networks:
+  mcp-network:
+    driver: bridge
+    name: mcp-local-network

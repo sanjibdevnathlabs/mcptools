@@ -1,0 +1,45 @@
+# Base image for all MCP servers
+# This image contains all shared dependencies from requirements.txt
+# and is reused by all MCP-specific images
+
+FROM python:3.13-slim
+
+# Metadata
+LABEL maintainer="sanjibdevnath"
+LABEL description="Base image for MCP servers with all shared dependencies"
+LABEL version="1.0.0"
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    g++ \
+    make \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements files
+COPY requirements.txt requirements-test.txt ./
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt -r requirements-test.txt
+
+# Create app user (non-root for security)
+RUN useradd -m -u 1000 appuser && \
+    chown -R appuser:appuser /app
+
+# Switch to non-root user
+USER appuser
+
+# Default command
+CMD ["python", "--version"]
+

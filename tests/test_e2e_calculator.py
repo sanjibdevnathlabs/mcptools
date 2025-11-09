@@ -48,10 +48,13 @@ def find_free_port():
 @pytest_asyncio.fixture(scope="class")
 async def calculator_stdio_client():
     """Fixture for calculator MCP client using STDIO protocol"""
+    env = os.environ.copy()
+    env["TRANSPORT_MODE"] = "stdio"
+    
     server_params = StdioServerParameters(
         command="python",
         args=["-m", "calculator"],
-        env=None,
+        env=env,
     )
 
     # Create client context

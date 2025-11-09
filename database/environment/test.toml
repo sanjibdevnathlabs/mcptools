@@ -30,6 +30,7 @@ log_destination = "file"
 [mcp]
 # SAFE MODE: Readonly for tests
 readonly_mode = true
+tool_mode = "${MCP_TOOL_MODE:-full}"  # Test all tools in "full" mode by default
 
 # Only allow safe read operations during tests
 # This prevents accidental data modification during testing
