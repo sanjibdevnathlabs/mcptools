@@ -12,12 +12,11 @@ from .database_manager import DatabaseManager
 from .error_handling import (
     ErrorHandler,
 )
-from .logging_config import get_logger
 from .monitoring import ProductionMonitor
 from .schema_manager import SchemaManager
 from .security import DatabaseSecurityManager
 
-# Temporary fallback logger for tool functions that don't have access to self.logger
+# Module-level logger
 logger = logging.getLogger(__name__)
 
 
@@ -63,7 +62,7 @@ class DatabaseMCPServer:
     def __init__(self):
         """Initialize the database MCP server."""
         self.config = Config()
-        self.logger = get_logger("server")
+        self.logger = logging.getLogger(__name__)
         self.database_manager = DatabaseManager()
         self.security_manager = DatabaseSecurityManager()
         self.production_monitor = ProductionMonitor(
@@ -77,8 +76,13 @@ class DatabaseMCPServer:
             else None
         )
 
-        # Create FastMCP instance
-        self.mcp = FastMCP(self.config.mcp.server_name)
+        # Create FastMCP instance with host and port from config
+        # Pass host/port explicitly so FastMCP doesn't use defaults
+        self.mcp = FastMCP(
+            self.config.mcp.server_name,
+            host=self.config.server.host,
+            port=self.config.server.port
+        )
         self._setup_handlers()
 
     def _setup_handlers(self):

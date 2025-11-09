@@ -1,4 +1,4 @@
-"""Logger configuration for Calculator MCP Server"""
+"""Logger configuration class - shared across all MCPs."""
 
 
 class LoggerConfig:
@@ -7,5 +7,5 @@ class LoggerConfig:
     level: str = "INFO"
     format: str = "text"  # text or json
     destination: str = "stdout"  # stdout, stderr, file, both
-    file_path: str = "logs/calculator.log"
+    file_path: str = "logs/app.log"
 

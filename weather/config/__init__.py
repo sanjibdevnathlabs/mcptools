@@ -7,11 +7,10 @@ Uses shared configuration loader with weather-specific config classes.
 import os
 from pathlib import Path
 
-from shared.config import ConfigLoader
+from shared.config import ConfigLoader, LoggerConfig
 
 from weather.config.api import APIConfig
 from weather.config.app import AppConfig
-from weather.config.logger import LoggerConfig
 from weather.config.server import ServerConfig
 
 

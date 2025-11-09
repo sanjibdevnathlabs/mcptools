@@ -6,10 +6,9 @@ Uses shared configuration loader with calculator-specific config classes.
 
 from pathlib import Path
 
-from shared.config import ConfigLoader
+from shared.config import ConfigLoader, LoggerConfig
 
 from calculator.config.app import AppConfig
-from calculator.config.logger import LoggerConfig
 from calculator.config.server import ServerConfig
 
 

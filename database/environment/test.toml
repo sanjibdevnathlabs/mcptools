@@ -23,9 +23,10 @@ transport_mode = "${TRANSPORT_MODE:-stdio}"
 host = "${FASTMCP_HOST:-127.0.0.1}"
 port = "${FASTMCP_PORT:-8000}"
 
+[logger]
 # Minimal logging for tests
-log_level = "ERROR"
-log_destination = "file"
+level = "ERROR"
+destination = "file"
 
 [mcp]
 # SAFE MODE: Readonly for tests

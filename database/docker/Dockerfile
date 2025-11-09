@@ -11,37 +11,39 @@ LABEL org.opencontainers.image.vendor="sanjibdevnath"
 LABEL org.opencontainers.image.source="https://github.com/sanjibdevnathlabs/mcptools"
 LABEL mcp.name="database"
 LABEL mcp.version="1.0.0"
-LABEL mcp.transports="stdio,sse,http"
+LABEL mcp.transports="sse,streamable-http"
 LABEL mcp.requires="mysql"
 
-# Copy only database-specific code
+# Copy shared modules (for logging and config)
+COPY shared/ /app/shared/
+
+# Copy database-specific code and E2E tests
 COPY database/ /app/database/
 COPY tests/__init__.py tests/conftest.py tests/test_e2e_database.py /app/tests/
 
-# Set working directory
-WORKDIR /app
+# Switch to non-root user (user already created in base image)
+USER appuser
 
-# Expose port for SSE and HTTP modes
-EXPOSE 8081
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD python -c "import sys; from database.config.app import AppConfig; sys.exit(0)"
+# Create logs directory with proper permissions
+RUN mkdir -p /app/logs
 
 # Environment defaults
-ENV MCP_NAME=database \
-    TRANSPORT_MODE=stdio \
-    LOG_LEVEL=INFO \
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    APP_ENV=docker \
+    TRANSPORT_MODE=sse \
     FASTMCP_HOST=0.0.0.0 \
-    FASTMCP_PORT=8081 \
-    DATABASE_HOST=localhost \
-    DATABASE_PORT=3306 \
-    DATABASE_USER=root \
-    DATABASE_NAME=mcp_db
+    FASTMCP_PORT=8086 \
+    LOG_FORMAT=json \
+    LOG_LEVEL=INFO \
+    DB_HOST=mysql \
+    DB_PORT=3306 \
+    DB_USER=mcp_user \
+    DB_DATABASE=mcp_db
+
+# Expose ports for SSE and HTTP
+EXPOSE 8086 8087
 
 # Entry point
 ENTRYPOINT ["python", "-m", "database"]
-
-# Default command (shows help)
-CMD ["--help"]
 

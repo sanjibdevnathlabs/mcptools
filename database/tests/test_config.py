@@ -48,7 +48,11 @@ class TestDatabaseConfig:
         assert hasattr(config.server, "transport_mode")
         assert hasattr(config.server, "host")
         assert hasattr(config.server, "port")
-        assert hasattr(config.server, "log_level")
+        
+        # Logger config is now separate
+        assert hasattr(config.logger, "level")
+        assert hasattr(config.logger, "format")
+        assert hasattr(config.logger, "destination")
 
     def test_mcp_config_attributes(self):
         """Test MCP configuration has required attributes"""

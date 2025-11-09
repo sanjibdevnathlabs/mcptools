@@ -51,13 +51,21 @@ class TestDatabaseIntegration:
         await manager.close_pool()
 
     @pytest.mark.asyncio
-    async def test_execute_query_without_pool(self):
-        """Test executing query without initializing pool"""
+    async def test_execute_query_with_lazy_initialization(self):
+        """Test that pool is automatically initialized on first query (lazy initialization)"""
         manager = DatabaseManager()
-        result = await manager.execute_query("SELECT 1")
-        assert result["success"] is False
-        assert "Connection pool is not initialized" in result["error"]
-        assert result["error_code"] == "POOL_NOT_INITIALIZED"
+        # Pool should not be initialized yet
+        assert manager.pool is None
+        
+        # Execute a query - should automatically initialize pool
+        result = await manager.execute_query("SELECT 1 as value")
+        
+        # Pool should now be initialized
+        assert manager.pool is not None
+        assert result["success"] is True
+        
+        # Clean up
+        await manager.close_pool()
 
     @pytest.mark.asyncio
     async def test_execute_query_too_long(self, db_manager):

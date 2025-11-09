@@ -282,9 +282,8 @@ docker-compose-up-database:
 	cd database/deployment/local && docker-compose up -d --build
 	@echo "✅ Database services started!"
 	@echo "   - MySQL: localhost:3306 (root/testpassword)"
-	@echo "   - STDIO: docker-compose -f database/deployment/local/docker-compose.yml logs -f database-stdio"
-	@echo "   - SSE:   http://localhost:8082 (docker-compose -f database/deployment/local/docker-compose.yml logs -f database-sse)"
-	@echo "   - HTTP:  http://localhost:8083 (docker-compose -f database/deployment/local/docker-compose.yml logs -f database-http)"
+	@echo "   - SSE:   http://localhost:8086 (docker-compose -f database/deployment/local/docker-compose.yml logs -f database-sse)"
+	@echo "   - HTTP:  http://localhost:8087 (docker-compose -f database/deployment/local/docker-compose.yml logs -f database-http)"
 
 docker-compose-up-weather:
 	@echo "🌤️  Starting weather services (will rebuild if needed)..."

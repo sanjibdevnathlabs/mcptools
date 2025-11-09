@@ -6,19 +6,20 @@ This directory contains common utilities and modules shared across all MCP serve
 
 ### `shared.config` - Configuration Loading
 
-Generic configuration loader that reads TOML files with environment variable interpolation.
+Generic configuration loader and shared config classes.
 
 **Features:**
 - Load from `environment/*.toml` files
 - Environment variable interpolation (`${VAR}` and `${VAR:-default}`)
 - Multi-environment support (dev, test, docker, prod)
 - Automatic merging of default and environment-specific configs
+- Shared `LoggerConfig` class for consistent logging configuration
 
 **Usage:**
 
 ```python
 from pathlib import Path
-from shared.config import ConfigLoader
+from shared.config import ConfigLoader, LoggerConfig
 
 # In your MCP's config/__init__.py
 config_dir = Path(__file__).parent.parent / "environment"
@@ -28,6 +29,12 @@ settings = loader.load()
 # Apply to your config objects
 config.app.name = settings["app"]["name"]
 config.server.port = int(settings["server"]["port"])
+
+# Use shared LoggerConfig
+config.logger = LoggerConfig()
+for key, value in settings.get("logger", {}).items():
+    if hasattr(config.logger, key):
+        setattr(config.logger, key, value)
 ```
 
 **Example TOML:**
@@ -85,7 +92,8 @@ shared/
 ├── README.md
 ├── config/
 │   ├── __init__.py
-│   └── loader.py       # ConfigLoader class
+│   ├── loader.py       # ConfigLoader class
+│   └── logger.py       # LoggerConfig class (shared across all MCPs)
 └── logging/
     ├── __init__.py
     └── setup.py        # setup_logging, JSONFormatter, TextFormatter
