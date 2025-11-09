@@ -216,22 +216,30 @@ jobs:
       matrix:
         mcp: ${{ fromJson(needs.detect-mcps.outputs.mcps) }}
     
-    services:
-      mysql:
-        image: mysql:8.0
-        env:
-          MYSQL_ROOT_PASSWORD: test_password
-          MYSQL_DATABASE: test_mcp_db
-        options: >-
-          --health-cmd="mysqladmin ping"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=3
-        ports:
-          - 3306:3306
-    
     steps:
       - uses: actions/checkout@v4
+      
+      - name: Start MySQL server (if testing database)
+        if: matrix.mcp == 'database'
+        run: |
+          # Start MySQL in Docker
+          docker run -d \
+            --name mysql-test \
+            -e MYSQL_ROOT_PASSWORD=test_password \
+            -e MYSQL_DATABASE=test_mcp_db \
+            -p 3306:3306 \
+            mysql:8.0
+          
+          # Wait for MySQL to be ready
+          echo "⏳ Waiting for MySQL to be ready..."
+          for i in {1..30}; do
+            if docker exec mysql-test mysqladmin ping -h localhost -ptest_password --silent; then
+              echo "✅ MySQL is ready"
+              break
+            fi
+            echo "⏳ Waiting for MySQL... ($i/30)"
+            sleep 2
+          done
       
       - uses: actions/setup-python@v5
         with:
@@ -303,6 +311,12 @@ jobs:
           if [ -n "$MOCK_SERVER_PID" ]; then
             kill $MOCK_SERVER_PID || true
           fi
+      
+      - name: Stop MySQL server (if running)
+        if: always() && matrix.mcp == 'database'
+        run: |
+          docker stop mysql-test || true
+          docker rm mysql-test || true
       
       - name: Upload coverage
         uses: codecov/codecov-action@v4
