@@ -152,12 +152,17 @@ jobs:
           cache-to: type=gha,mode=${{ github.event_name == 'pull_request' && 'min' || 'max' }}
   
   # ===========================================================================
-  # Stage 5: Code Quality Checks (black + ruff + mypy)
+  # Stage 5: Code Quality Checks (black + ruff + mypy) - Per MCP
   # ===========================================================================
   quality-checks:
-    name: 🔍 Quality Checks (black + ruff + mypy)
+    name: 🔍 Quality Check ${{ matrix.mcp }}
     needs: detect-mcps
     runs-on: ubuntu-latest
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        mcp: ${{ fromJson(needs.detect-mcps.outputs.mcps) }}
     
     steps:
       - uses: actions/checkout@v4
@@ -174,7 +179,22 @@ jobs:
         run: make install
       
       - name: Run quality checks (black + ruff + mypy)
-        run: make check
+        run: |
+          case "${{ matrix.mcp }}" in
+            calculator)
+              make check-calc
+              ;;
+            weather)
+              make check-weather
+              ;;
+            database)
+              make check-db
+              ;;
+            *)
+              echo "⚠️ Unknown MCP: ${{ matrix.mcp }}"
+              exit 1
+              ;;
+          esac
   
   security:
     name: 🔒 Security Scan

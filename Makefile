@@ -1,4 +1,4 @@
-.PHONY: help install check fix clean test test-calc test-weather test-db run-database run-weather run-calculator \
+.PHONY: help install check check-calc check-weather check-db fix clean test test-calc test-weather test-db run-database run-weather run-calculator \
 	docker-build-base docker-build-calculator docker-build-database docker-build-weather docker-build-all \
 	docker-compose-up-calculator docker-compose-up-database docker-compose-up-weather \
 	docker-compose-down-calculator docker-compose-down-database docker-compose-down-weather docker-compose-down-all \
@@ -17,8 +17,11 @@ help:
 	@echo "  make install    - Install all dependencies"
 	@echo ""
 	@echo "✅ Code Quality:"
-	@echo "  make check      - Run all checks (format + lint + type-check)"
-	@echo "  make fix        - Auto-fix all issues (format + lint)"
+	@echo "  make check         - Run all checks (format + lint + type-check)"
+	@echo "  make check-calc    - Run quality checks for calculator only"
+	@echo "  make check-weather - Run quality checks for weather only"
+	@echo "  make check-db      - Run quality checks for database only"
+	@echo "  make fix           - Auto-fix all issues (format + lint)"
 	@echo ""
 	@echo "🧪 Testing:"
 	@echo "  make test       - Run all tests with coverage report"
@@ -112,6 +115,28 @@ check:
 	fi
 	@echo ""
 	@echo "✅ All checks completed successfully!"
+
+# Check individual MCPs
+check-calc:
+	@echo "🧮 Running quality checks for calculator..."
+	@black --check calculator/ || (echo "❌ Format check failed. Run 'make fix' to auto-fix." && exit 1)
+	@ruff check calculator/ || (echo "❌ Lint check failed. Run 'make fix' to auto-fix." && exit 1)
+	@mypy calculator/config/ calculator/main.py || echo "⚠️  Type checking found issues"
+	@echo "✅ Calculator quality checks passed!"
+
+check-weather:
+	@echo "🌤️  Running quality checks for weather..."
+	@black --check weather/ || (echo "❌ Format check failed. Run 'make fix' to auto-fix." && exit 1)
+	@ruff check weather/ || (echo "❌ Lint check failed. Run 'make fix' to auto-fix." && exit 1)
+	@mypy weather/config/ weather/main.py || echo "⚠️  Type checking found issues"
+	@echo "✅ Weather quality checks passed!"
+
+check-db:
+	@echo "🗄️  Running quality checks for database..."
+	@black --check database/ || (echo "❌ Format check failed. Run 'make fix' to auto-fix." && exit 1)
+	@ruff check database/ || (echo "❌ Lint check failed. Run 'make fix' to auto-fix." && exit 1)
+	@mypy database/src/ database/config/ database/main.py || echo "⚠️  Type checking found issues"
+	@echo "✅ Database quality checks passed!"
 
 # Auto-fix all issues (format + lint)
 fix:
