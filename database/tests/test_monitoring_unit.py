@@ -1,4 +1,5 @@
 """Comprehensive unit tests for monitoring module"""
+
 import time
 from unittest.mock import MagicMock, patch
 
@@ -8,12 +9,10 @@ from database.src.monitoring import (
     ErrorRecord,
     ErrorTracker,
     HealthCheckResult,
-    HealthChecker,
     HealthStatus,
     Metric,
     MetricType,
     PerformanceTracker,
-    ProductionMonitor,
     SystemResourceMonitor,
 )
 
@@ -255,7 +254,7 @@ class TestPerformanceTracker:
         tracker = PerformanceTracker()
 
         # Add more than maxlen query times (maxlen=1000)
-        for i in range(1100):
+        for _ in range(1100):
             tracker.record_query_execution("SELECT", 0.01, True)
 
         # Should only keep last 1000
@@ -417,4 +416,3 @@ class TestSystemResourceMonitor:
 
         assert "error" in metrics
         assert "Test error" in metrics["error"]
-

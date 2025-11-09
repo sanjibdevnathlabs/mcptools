@@ -24,7 +24,12 @@ class TestWeatherTools:
         mock_response_data = {
             "cod": 200,
             "name": "Mumbai",
-            "main": {"temp": 28.5, "feels_like": 31.2, "humidity": 75, "pressure": 1013},
+            "main": {
+                "temp": 28.5,
+                "feels_like": 31.2,
+                "humidity": 75,
+                "pressure": 1013,
+            },
             "weather": [{"main": "Clouds", "description": "few clouds"}],
             "wind": {"speed": 5.5, "deg": 270},
             "visibility": 10000,
@@ -189,7 +194,12 @@ class TestHelperFunctions:
         """Test formatting normal weather conditions"""
         mock_data = {
             "name": "Mumbai",
-            "main": {"temp": 28.5, "feels_like": 31.2, "humidity": 75, "pressure": 1013},
+            "main": {
+                "temp": 28.5,
+                "feels_like": 31.2,
+                "humidity": 75,
+                "pressure": 1013,
+            },
             "weather": [{"main": "Clear", "description": "clear sky"}],
             "wind": {"speed": 5.5, "deg": 270},
             "visibility": 10000,
@@ -207,7 +217,12 @@ class TestHelperFunctions:
         """Test formatting severe weather with alert"""
         mock_data = {
             "name": "Delhi",
-            "main": {"temp": 25.0, "feels_like": 24.0, "humidity": 80, "pressure": 1010},
+            "main": {
+                "temp": 25.0,
+                "feels_like": 24.0,
+                "humidity": 80,
+                "pressure": 1010,
+            },
             "weather": [{"main": "Thunderstorm", "description": "heavy thunderstorm"}],
             "wind": {"speed": 10.0, "deg": 180},
             "visibility": 5000,
@@ -223,7 +238,12 @@ class TestHelperFunctions:
         """Test formatting rainy weather with advisory"""
         mock_data = {
             "name": "Bangalore",
-            "main": {"temp": 22.0, "feels_like": 22.0, "humidity": 85, "pressure": 1008},
+            "main": {
+                "temp": 22.0,
+                "feels_like": 22.0,
+                "humidity": 85,
+                "pressure": 1008,
+            },
             "weather": [{"main": "Rain", "description": "light rain"}],
             "wind": {"speed": 4.0, "deg": 90},
             "visibility": 8000,

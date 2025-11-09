@@ -2,12 +2,13 @@
 
 ## 📦 Overview
 
-Local development environment for Database MCP using Docker Compose. Includes MySQL 8.0 database and runs both SSE and HTTP transports simultaneously.
+Local development environment for Database MCP using Docker Compose. Includes MySQL 8.0 database and runs both SSE and HTTP transports simultaneously, with **automatic test execution**.
 
 **Services:**
 - `mysql` - MySQL 8.0 database on port 3306
 - `database-sse` - SSE transport on port 8086
 - `database-http` - HTTP transport on port 8087
+- `database-test` - Automatic quality checks + tests (runs once, exits with status code)
 
 ---
 
@@ -44,11 +45,18 @@ docker-compose down
 
 ### Docker Compose Services
 
-| Service | Port | Transport | Container Name | Health Check | Depends On |
-|---------|------|-----------|----------------|--------------|------------|
-| `mysql` | 3306 | - | `mysql` | ✅ mysqladmin ping | - |
-| `database-sse` | 8086 | SSE | `database-sse` | ✅ TCP port check | mysql |
-| `database-http` | 8087 | HTTP | `database-http` | ✅ TCP port check | mysql |
+| Service | Port | Transport | Container Name | Health Check | Depends On | Image |
+|---------|------|-----------|----------------|--------------|------------|-------|
+| `mysql` | 3306 | - | `mysql-mcp` | ✅ mysqladmin ping | - | `mysql:8.0` |
+| `database-sse` | 8086 | SSE | `database-sse` | ✅ TCP port check | mysql | `mcp-database:local-sse` |
+| `database-http` | 8087 | HTTP | `database-http` | ✅ TCP port check | mysql | `mcp-database:local-http` |
+| `database-test` | - | N/A | `database-test` | N/A (exits after tests) | mysql | `mcp-database:test` |
+
+**Test Service Behavior:**
+- Runs automatically with `docker-compose up`
+- Executes: black → ruff → mypy → pytest (191 tests)
+- Exits with code 0 (success) or non-zero (failure)
+- Status visible with: `docker ps -a --filter "name=database-test"`
 
 ### Environment Variables
 

@@ -2,11 +2,12 @@
 
 ## 📦 Overview
 
-Local development environment for Weather MCP using Docker Compose. Runs both SSE and HTTP transports simultaneously for testing weather information retrieval.
+Local development environment for Weather MCP using Docker Compose. Runs both SSE and HTTP transports simultaneously, with **automatic test execution**.
 
 **Services:**
 - `weather-sse` - SSE transport on port 8082
 - `weather-http` - HTTP transport on port 8083
+- `weather-test` - Automatic quality checks + tests (runs once, exits with status code)
 
 **External Dependency:** OpenWeatherMap API (free tier: 1,000 calls/day)
 

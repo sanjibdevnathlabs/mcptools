@@ -48,17 +48,26 @@ environment = "${APP_ENV:-dev}"
 [server]
 host = "${FASTMCP_HOST:-127.0.0.1}"
 port = "${FASTMCP_PORT:-8000}"
+transport_mode = "${TRANSPORT_MODE:-stdio}"
+
+[logger]
+level = "${LOG_LEVEL:-INFO}"
+format = "text"
+destination = "stdout"  # Automatically changes to "file" for stdio transport
+file_path = "logs/my-mcp.log"
 ```
 
 ### `shared.logging` - Logging Setup
 
-Consistent logging configuration across all MCP servers.
+Consistent logging configuration across all MCP servers with intelligent transport handling.
 
 **Features:**
 - JSON and text formatting
 - Configurable log levels
-- Multiple output destinations (stdout, stderr)
+- Multiple output destinations (stdout, stderr, file, both)
 - Structured logging support
+- **Automatic file logging for stdio transport** (prevents log conflicts)
+- TraceCodeLogger integration
 
 **Usage:**
 
@@ -67,7 +76,11 @@ from shared.logging import setup_logging
 from myapp.config import Config
 
 config = Config()
-logger = setup_logging(config, "myapp")
+logger = setup_logging(
+    config=config,
+    logger_name="myapp",
+    transport_mode=config.server.transport_mode  # Important for stdio handling
+)
 
 logger.info("Application started")
 logger.error("Error occurred", exc_info=True)
@@ -75,14 +88,19 @@ logger.error("Error occurred", exc_info=True)
 
 **Required Config Attributes:**
 
-Your config object must have these attributes:
+Your config object must have a `logger` section with these attributes:
 
 ```python
-class ServerConfig:
-    log_level: str = "INFO"        # DEBUG, INFO, WARNING, ERROR, CRITICAL
-    log_format: str = "text"       # text or json
-    log_destination: str = "stdout" # stdout, stderr, both
+class LoggerConfig:
+    level: str = "INFO"           # DEBUG, INFO, WARNING, ERROR, CRITICAL
+    format: str = "text"          # text or json
+    destination: str = "stdout"   # stdout, stderr, file, both
+    file_path: str = "logs/app.log"  # Path when destination is file or both
 ```
+
+**Special Behavior:**
+- When `transport_mode="stdio"`, logging automatically switches to **file** destination
+- This prevents logs from interfering with stdio communication protocol
 
 ## 🏗️ Structure
 
@@ -171,9 +189,12 @@ environment = "${APP_ENV:-dev}"
 transport_mode = "${TRANSPORT_MODE:-stdio}"
 host = "${FASTMCP_HOST:-127.0.0.1}"
 port = "${FASTMCP_PORT:-8000}"
-log_level = "${LOG_LEVEL:-INFO}"
-log_format = "text"
-log_destination = "stdout"
+
+[logger]
+level = "${LOG_LEVEL:-INFO}"
+format = "text"
+destination = "stdout"
+file_path = "logs/myapp.log"
 ```
 
 ```toml
@@ -181,8 +202,8 @@ log_destination = "stdout"
 [app]
 environment = "docker"
 
-[server]
-log_format = "json"  # JSON for container logging
+[logger]
+format = "json"  # JSON for container logging
 ```
 
 ## ✅ Benefits

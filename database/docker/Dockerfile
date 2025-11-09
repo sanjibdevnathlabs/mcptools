@@ -17,33 +17,26 @@ LABEL mcp.requires="mysql"
 # Copy shared modules (for logging and config)
 COPY shared/ /app/shared/
 
-# Copy database-specific code and E2E tests
+# Copy database-specific code
 COPY database/ /app/database/
-COPY tests/__init__.py tests/conftest.py tests/test_e2e_database.py /app/tests/
 
-# Switch to non-root user (user already created in base image)
-USER appuser
+# Set working directory
+WORKDIR /app
 
-# Create logs directory with proper permissions
-RUN mkdir -p /app/logs
+# Expose ports for SSE and HTTP transports
+EXPOSE 8086 8087
 
 # Environment defaults
-ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    APP_ENV=docker \
+ENV APP_ENV=docker \
     TRANSPORT_MODE=sse \
     FASTMCP_HOST=0.0.0.0 \
     FASTMCP_PORT=8086 \
-    LOG_FORMAT=json \
     LOG_LEVEL=INFO \
-    DB_HOST=mysql \
+    DB_HOST=mysql-mcp \
     DB_PORT=3306 \
-    DB_USER=mcp_user \
+    DB_USER=root \
+    DB_PASSWORD=root_password \
     DB_DATABASE=mcp_db
-
-# Expose ports for SSE and HTTP
-EXPOSE 8086 8087
 
 # Entry point
 ENTRYPOINT ["python", "-m", "database"]
-

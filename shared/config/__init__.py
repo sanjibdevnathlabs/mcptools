@@ -11,4 +11,3 @@ from shared.config.loader import ConfigLoader
 from shared.config.logger import LoggerConfig
 
 __all__ = ["ConfigLoader", "LoggerConfig"]
-

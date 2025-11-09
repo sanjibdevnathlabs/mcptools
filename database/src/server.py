@@ -81,7 +81,7 @@ class DatabaseMCPServer:
         self.mcp = FastMCP(
             self.config.mcp.server_name,
             host=self.config.server.host,
-            port=self.config.server.port
+            port=self.config.server.port,
         )
         self._setup_handlers()
 

@@ -45,3 +45,31 @@ services:
       retries: 3
       start_period: 5s
 
+  # Test service - Run quality checks and tests
+  # Runs automatically with docker-compose up (exit code indicates success/failure)
+  # Can also run explicitly: docker-compose run --rm weather-test
+  weather-test:
+    build:
+      context: ../../..
+      dockerfile: weather/docker/Dockerfile.test
+      args:
+        BASE_TAG: local-dev
+    image: mcp-weather:test
+    container_name: weather-test
+    environment:
+      - APP_ENV=test
+      - LOG_LEVEL=ERROR
+      - OPENWEATHER_API_KEY=${OPENWEATHER_API_KEY:-test_api_key}
+    volumes:
+      # Mount source for testing local changes
+      - ../../../weather:/app/weather:ro
+      - ../../../shared:/app/shared:ro
+      - ../../../tests:/app/tests:ro
+    working_dir: /app
+    restart: "no"  # Don't restart after tests complete
+
+networks:
+  mcp-network:
+    driver: bridge
+    name: mcp-local-network
+

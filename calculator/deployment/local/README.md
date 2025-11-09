@@ -2,11 +2,12 @@
 
 ## 📦 Overview
 
-Local development environment for Calculator MCP using Docker Compose. Runs both SSE and HTTP transports simultaneously for testing.
+Local development environment for Calculator MCP using Docker Compose. Runs both SSE and HTTP transports simultaneously, with **automatic test execution**.
 
 **Services:**
 - `calculator-sse` - SSE transport on port 8080
 - `calculator-http` - HTTP transport on port 8081
+- `calculator-test` - Automatic quality checks + tests (runs once, exits with status code)
 
 ---
 
@@ -43,10 +44,17 @@ docker-compose down
 
 ### Docker Compose Services
 
-| Service | Port | Transport | Container Name | Health Check |
-|---------|------|-----------|----------------|--------------|
-| `calculator-sse` | 8080 | SSE | `calculator-sse` | ✅ TCP port check |
-| `calculator-http` | 8081 | HTTP | `calculator-http` | ✅ TCP port check |
+| Service | Port | Transport | Container Name | Health Check | Image |
+|---------|------|-----------|----------------|--------------|-------|
+| `calculator-sse` | 8080 | SSE | `calculator-sse` | ✅ TCP port check | `mcp-calculator:local-sse` |
+| `calculator-http` | 8081 | HTTP | `calculator-http` | ✅ TCP port check | `mcp-calculator:local-http` |
+| `calculator-test` | - | N/A | `calculator-test` | N/A (exits after tests) | `mcp-calculator:test` |
+
+**Test Service Behavior:**
+- Runs automatically with `docker-compose up`
+- Executes: black → ruff → mypy → pytest (112 tests)
+- Exits with code 0 (success) or non-zero (failure)
+- Status visible with: `docker ps -a --filter "name=calculator-test"`
 
 ### Environment Variables
 
@@ -79,6 +87,37 @@ LOG_LEVEL=INFO docker-compose up -d
 ---
 
 ## 🧪 Testing
+
+### Automatic Testing with Docker Compose
+
+Tests run **automatically** when you start services:
+
+```bash
+# Start services (tests run automatically)
+docker-compose up -d
+
+# Or from repository root
+make docker-compose-up-calculator
+
+# Check test results
+docker ps -a --filter "name=calculator-test"
+# Look for:
+#  - Status: "Exited (0)" = ✅ All tests passed
+#  - Status: "Exited (1)" = ❌ Tests failed
+
+# View test logs
+docker logs calculator-test
+
+# Run tests explicitly (without starting services)
+make docker-test-calculator   # From repository root
+```
+
+**What gets tested:**
+- ✅ Code formatting (black)
+- ✅ Linting (ruff)
+- ✅ Type checking (mypy)
+- ✅ 112 unit + integration + E2E tests
+- ✅ All 3 transport protocols (STDIO, SSE, HTTP)
 
 ### Using MCP Inspector
 
@@ -282,16 +321,20 @@ docker-compose up -d
 
 ```
 calculator/deployment/local/
-├── docker-compose.yml   # Compose configuration
+├── docker-compose.yml   # Compose configuration (includes test service)
 └── README.md           # This file
 
 Related files:
 ├── ../../docker/
-│   ├── Dockerfile      # Calculator image definition
-│   └── .dockerignore   # Build exclusions
-└── ../../environment/
-    ├── default.toml    # Default config
-    └── docker.toml     # Docker overrides
+│   ├── Dockerfile       # Production image (SSE + HTTP transports)
+│   ├── Dockerfile.test  # Test image (quality checks + tests)
+│   └── .dockerignore    # Build exclusions
+├── ../../environment/
+│   ├── default.toml     # Default config
+│   ├── docker.toml      # Docker overrides
+│   └── test.toml        # Test environment config
+└── ../../tests/         # Calculator-specific tests
+    └── ...              # Unit, integration tests
 ```
 
 ---

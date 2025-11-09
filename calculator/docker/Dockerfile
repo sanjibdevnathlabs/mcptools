@@ -13,15 +13,13 @@ LABEL mcp.name="calculator"
 LABEL mcp.version="1.0.0"
 LABEL mcp.transports="sse,streamable-http"
 
+WORKDIR /app
+
 # Copy shared modules (required by calculator)
-COPY shared/ /app/shared/
+COPY shared/ ./shared/
 
 # Copy calculator-specific code
-COPY calculator/ /app/calculator/
-COPY tests/__init__.py tests/conftest.py tests/test_e2e_calculator.py /app/tests/
-
-# Set working directory
-WORKDIR /app
+COPY calculator/ ./calculator/
 
 # Expose ports for SSE and HTTP transports
 # Actual port used depends on TRANSPORT_MODE environment variable

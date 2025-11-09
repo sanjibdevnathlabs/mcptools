@@ -7,13 +7,12 @@ Uses shared ConfigLoader for consistent configuration management.
 
 from pathlib import Path
 
-from shared.config import ConfigLoader, LoggerConfig
-
 from database.config.app import AppConfig
 from database.config.database import DatabaseConfig
 from database.config.mcp import MCPConfig
 from database.config.security import SecurityConfig
 from database.config.server import ServerConfig
+from shared.config import ConfigLoader, LoggerConfig
 
 
 class Config:

@@ -152,10 +152,10 @@ jobs:
           cache-to: type=gha,mode=${{ github.event_name == 'pull_request' && 'min' || 'max' }}
   
   # ===========================================================================
-  # Stage 5: Code Quality Checks
+  # Stage 5: Code Quality Checks (black + ruff + mypy)
   # ===========================================================================
-  lint:
-    name: 🔍 Lint & Format Check
+  quality-checks:
+    name: 🔍 Quality Checks (black + ruff + mypy)
     needs: detect-mcps
     runs-on: ubuntu-latest
     
@@ -166,24 +166,29 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       
-      - name: Install linters
+      - name: Install dependencies
         run: |
-          pip install black isort flake8
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
       
-      - name: Run Black
-        run: black --check .
-      
-      - name: Run isort
-        run: isort --check-only .
-      
-      - name: Run Flake8
+      - name: 1️⃣ Check code formatting (black)
         run: |
-          # Lint all discovered MCPs
-          MCPS='${{ needs.detect-mcps.outputs.mcps }}'
-          echo "$MCPS" | jq -r '.[]' | while read mcp; do
-            echo "Linting $mcp..."
-            flake8 "$mcp/" || true
-          done
+          echo "Checking code formatting with black..."
+          black --check calculator database weather shared || \
+          (echo "❌ Format check failed. Run 'make fix' to auto-fix." && exit 1)
+      
+      - name: 2️⃣ Run linter (ruff)
+        run: |
+          echo "Running ruff linter..."
+          ruff check calculator database weather shared || \
+          (echo "❌ Lint check failed. Run 'make fix' to auto-fix." && exit 1)
+      
+      - name: 3️⃣ Run type checker (mypy)
+        run: |
+          echo "Running type checker (mypy)..."
+          mypy calculator database weather shared || \
+          (echo "❌ Type check failed. Fix type errors." && exit 1)
   
   security:
     name: 🔒 Security Scan
@@ -216,7 +221,7 @@ jobs:
   # ===========================================================================
   test-mcps:
     name: 🧪 Test ${{ matrix.mcp }}
-    needs: [detect-mcps, build-base, lint, security]
+    needs: [detect-mcps, build-base, quality-checks, security]
     runs-on: ubuntu-latest
     
     strategy:
@@ -258,16 +263,16 @@ jobs:
           DB_PASSWORD: test_password
           DB_DATABASE: test_mcp_db
         run: |
-          # Test MCP-specific tests
+          # Test MCP-specific unit tests
           pytest ${{ matrix.mcp }}/tests/ -n auto \
             --cov=${{ matrix.mcp }} \
             --cov-report=xml \
             --cov-report=term-missing \
             -v
           
-          # Test E2E for this MCP
-          if [ -f "tests/test_e2e_${{ matrix.mcp }}.py" ]; then
-            pytest tests/test_e2e_${{ matrix.mcp }}.py -n auto -v
+          # Test E2E for this MCP (new path structure: tests/<mcp>/)
+          if [ -d "tests/${{ matrix.mcp }}/" ]; then
+            pytest tests/${{ matrix.mcp }}/ -n auto -v
           fi
       
       - name: Upload coverage

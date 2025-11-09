@@ -8,7 +8,7 @@ services:
       dockerfile: calculator/docker/Dockerfile
       args:
         BASE_TAG: local-dev
-    image: mcp-calculator:local
+    image: mcp-calculator:local-sse
     container_name: calculator-sse
     environment:
       # Use docker environment configuration
@@ -36,7 +36,7 @@ services:
       dockerfile: calculator/docker/Dockerfile
       args:
         BASE_TAG: local-dev
-    image: mcp-calculator:local
+    image: mcp-calculator:local-http
     container_name: calculator-http
     environment:
       # Use docker environment configuration
@@ -56,6 +56,30 @@ services:
       timeout: 3s
       retries: 3
       start_period: 10s
+
+  # Test service - Run quality checks and tests
+  # Runs automatically with docker-compose up (exit code indicates success/failure)
+  # Can also run explicitly: docker-compose run --rm calculator-test
+  calculator-test:
+    build:
+      context: ../../..
+      dockerfile: calculator/docker/Dockerfile.test
+      args:
+        BASE_TAG: local-dev
+    image: mcp-calculator:test
+    container_name: calculator-test
+    environment:
+      - APP_ENV=test
+      - LOG_LEVEL=ERROR
+    volumes:
+      # Mount source for testing local changes
+      - ../../../calculator:/app/calculator:ro
+      - ../../../shared:/app/shared:ro
+      - ../../../tests:/app/tests:ro
+    working_dir: /app
+    networks:
+      - mcp-network
+    restart: "no"  # Don't restart after tests complete
 
 networks:
   mcp-network:

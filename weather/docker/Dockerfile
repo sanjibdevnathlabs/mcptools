@@ -18,7 +18,6 @@ COPY shared/ /app/shared/
 
 # Copy weather-specific code
 COPY weather/ /app/weather/
-COPY tests/__init__.py tests/conftest.py tests/test_e2e_weather.py /app/tests/
 
 # Set working directory
 WORKDIR /app
@@ -39,4 +38,3 @@ ENV APP_ENV=docker \
 # Entry point - runs the weather server
 # Config system will load environment/docker.toml when APP_ENV=docker
 ENTRYPOINT ["python", "-m", "weather"]
-

@@ -7,4 +7,3 @@ This package contains reusable components that are shared across all MCP servers
 """
 
 __version__ = "1.0.0"
-

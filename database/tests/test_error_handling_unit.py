@@ -1,7 +1,8 @@
 """Comprehensive unit tests for error_handling module"""
+
 import asyncio
 import time
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -543,10 +544,10 @@ class TestGracefulDegradationManager:
     def test_set_service_state_to_degraded(self, degradation_manager, mock_logger):
         """Test setting service state to degraded."""
         degradation_manager.set_service_state("test_service", ServiceState.DEGRADED)
-        
+
         state = degradation_manager.get_service_state("test_service")
         assert state == ServiceState.DEGRADED
-        
+
         # Should log degradation
         mock_logger.warning.assert_called_once()
         assert "SERVICE_DEGRADED" in str(mock_logger.warning.call_args)
@@ -554,10 +555,10 @@ class TestGracefulDegradationManager:
     def test_set_service_state_to_unavailable(self, degradation_manager, mock_logger):
         """Test setting service state to unavailable."""
         degradation_manager.set_service_state("test_service", ServiceState.UNAVAILABLE)
-        
+
         state = degradation_manager.get_service_state("test_service")
         assert state == ServiceState.UNAVAILABLE
-        
+
         mock_logger.warning.assert_called_once()
 
     def test_set_service_state_to_available(self, degradation_manager, mock_logger):
@@ -565,12 +566,12 @@ class TestGracefulDegradationManager:
         # First degrade
         degradation_manager.set_service_state("test_service", ServiceState.DEGRADED)
         mock_logger.warning.assert_called_once()
-        
+
         # Then recover
         degradation_manager.set_service_state("test_service", ServiceState.AVAILABLE)
         state = degradation_manager.get_service_state("test_service")
         assert state == ServiceState.AVAILABLE
-        
+
         # Should log recovery
         mock_logger.info.assert_called_once()
         assert "SERVICE_RECOVERED" in str(mock_logger.info.call_args)
@@ -583,10 +584,10 @@ class TestGracefulDegradationManager:
     def test_should_use_fallback_degraded_timeout(self, degradation_manager):
         """Test fallback decision for degraded service after timeout."""
         degradation_manager.set_service_state("test_service", ServiceState.DEGRADED)
-        
+
         # Immediately should not use fallback
         assert degradation_manager.should_use_fallback("test_service") is False
-        
+
         # Simulate time passing beyond max_degraded_duration
         with patch("time.time", return_value=time.time() + 400):
             assert degradation_manager.should_use_fallback("test_service") is True
@@ -599,7 +600,7 @@ class TestGracefulDegradationManager:
         """Test caching responses."""
         response = {"data": "test_data"}
         degradation_manager.cache_response("test_key", response)
-        
+
         cached = degradation_manager.get_cached_response("test_key")
         assert cached is not None
         assert cached["data"] == "test_data"
@@ -615,7 +616,7 @@ class TestGracefulDegradationManager:
         """Test getting expired cached response."""
         response = {"data": "test_data"}
         degradation_manager.cache_response("test_key", response)
-        
+
         # Simulate time passing beyond max_age
         with patch("time.time", return_value=time.time() + 400):
             cached = degradation_manager.get_cached_response("test_key", max_age=300.0)
@@ -625,10 +626,10 @@ class TestGracefulDegradationManager:
         """Test that caching is disabled when config is set."""
         config = DegradationConfig(enable_cached_responses=False)
         manager = GracefulDegradationManager(config)
-        
+
         response = {"data": "test"}
         manager.cache_response("test_key", response)
-        
+
         cached = manager.get_cached_response("test_key")
         assert cached is None
 
@@ -640,7 +641,7 @@ class TestErrorHandler:
     @pytest.fixture
     def mock_config(self):
         """Mock Config for ErrorHandler."""
-        with patch("database.src.error_handling.Config") as MockConfig:
+        with patch("database.src.error_handling.Config") as MockConfig:  # noqa: N806
             mock_instance = MockConfig.return_value
             mock_instance.server.debug = False
             yield mock_instance
@@ -675,7 +676,7 @@ class TestErrorHandler:
         """Test handle_operation context manager with successful operation."""
         async with error_handler.handle_operation("test_op", client_id="client_1"):
             result = "success"
-        
+
         assert result == "success"
 
     @pytest.mark.asyncio
@@ -686,7 +687,7 @@ class TestErrorHandler:
                 "test_op", client_id="client_1", service_name="test_service"
             ):
                 raise DatabaseQueryError("Query failed")
-        
+
         # Should log the error
         mock_logger.error.assert_called_once()
         assert "OPERATION_FAILED" in str(mock_logger.error.call_args)
@@ -694,39 +695,41 @@ class TestErrorHandler:
     @pytest.mark.asyncio
     async def test_execute_with_recovery_success(self, error_handler):
         """Test execute_with_recovery with successful operation."""
+
         async def successful_op():
             return {"data": "success"}
-        
+
         result = await error_handler.execute_with_recovery(
             successful_op, "test_op", enable_retry=False, enable_circuit_breaker=False
         )
-        
+
         assert result == {"data": "success"}
 
     @pytest.mark.asyncio
     async def test_execute_with_recovery_with_retry(self, error_handler):
         """Test execute_with_recovery with retry enabled."""
         call_count = {"count": 0}
-        
+
         async def flaky_op():
             call_count["count"] += 1
             if call_count["count"] < 2:
                 raise DatabaseConnectionError("Connection failed")
             return {"data": "success"}
-        
+
         result = await error_handler.execute_with_recovery(
             flaky_op, "test_op", enable_retry=True, enable_circuit_breaker=False
         )
-        
+
         assert result == {"data": "success"}
         assert call_count["count"] == 2
 
     @pytest.mark.asyncio
     async def test_execute_with_recovery_with_circuit_breaker(self, error_handler):
         """Test execute_with_recovery with circuit breaker enabled."""
+
         async def successful_op():
             return {"data": "success"}
-        
+
         result = await error_handler.execute_with_recovery(
             successful_op,
             "test_op",
@@ -734,7 +737,7 @@ class TestErrorHandler:
             enable_circuit_breaker=True,
             service_name="test_service",
         )
-        
+
         assert result == {"data": "success"}
         # Circuit breaker should be created
         assert "test_service" in error_handler.circuit_breakers
@@ -742,17 +745,18 @@ class TestErrorHandler:
     @pytest.mark.asyncio
     async def test_execute_with_recovery_with_fallback(self, error_handler):
         """Test execute_with_recovery with fallback operation."""
+
         async def failing_op():
             raise DatabaseConnectionError("Primary failed")
-        
+
         async def fallback_op():
             return {"data": "fallback_data"}
-        
+
         # Set service to degraded so fallback is used
         error_handler.degradation_manager.set_service_state(
             "test_service", ServiceState.DEGRADED
         )
-        
+
         # Simulate time passing beyond max_degraded_duration
         with patch("time.time", return_value=time.time() + 400):
             result = await error_handler.execute_with_recovery(
@@ -763,23 +767,26 @@ class TestErrorHandler:
                 service_name="test_service",
                 fallback_operation=fallback_op,
             )
-        
+
         assert result["data"] == "fallback_data"
         assert result["_fallback_used"] is True
 
     @pytest.mark.asyncio
-    async def test_execute_with_recovery_fallback_also_fails(self, error_handler, mock_logger):
+    async def test_execute_with_recovery_fallback_also_fails(
+        self, error_handler, mock_logger
+    ):
         """Test execute_with_recovery when both primary and fallback fail."""
+
         async def failing_op():
             raise DatabaseConnectionError("Primary failed")
-        
+
         async def failing_fallback_op():
             raise DatabaseQueryError("Fallback failed")
-        
+
         error_handler.degradation_manager.set_service_state(
             "test_service", ServiceState.DEGRADED
         )
-        
+
         with patch("time.time", return_value=time.time() + 400):
             with pytest.raises(DatabaseConnectionError):
                 await error_handler.execute_with_recovery(
@@ -790,9 +797,12 @@ class TestErrorHandler:
                     service_name="test_service",
                     fallback_operation=failing_fallback_op,
                 )
-        
+
         # Should log fallback failure
-        assert any("FALLBACK_OPERATION_FAILED" in str(call) for call in mock_logger.error.call_args_list)
+        assert any(
+            "FALLBACK_OPERATION_FAILED" in str(call)
+            for call in mock_logger.error.call_args_list
+        )
 
 
 @pytest.mark.unit
@@ -810,7 +820,7 @@ class TestHandleErrorsDecorator:
     @pytest.fixture
     def mock_config(self):
         """Mock Config."""
-        with patch("database.src.error_handling.Config") as MockConfig:
+        with patch("database.src.error_handling.Config") as MockConfig:  # noqa: N806
             mock_instance = MockConfig.return_value
             mock_instance.server.debug = False
             yield mock_instance
@@ -818,14 +828,14 @@ class TestHandleErrorsDecorator:
     @pytest.mark.asyncio
     async def test_decorator_success(self, mock_logger, mock_config):
         """Test decorator with successful operation."""
-        
+
         class TestClass:
             error_handler = ErrorHandler()
-        
+
         @handle_errors(enable_retry=False, enable_circuit_breaker=False)
         async def test_method(self):
             return "success"
-        
+
         instance = TestClass()
         result = await test_method(instance)
         assert result == "success"
@@ -833,31 +843,30 @@ class TestHandleErrorsDecorator:
     @pytest.mark.asyncio
     async def test_decorator_with_error(self, mock_logger, mock_config):
         """Test decorator with error."""
-        
+
         class TestClass:
             error_handler = ErrorHandler()
-        
+
         @handle_errors(enable_retry=False, enable_circuit_breaker=False)
         async def test_method(self):
             raise DatabaseQueryError("Query failed")
-        
+
         instance = TestClass()
-        
+
         with pytest.raises(DatabaseQueryError):
             await test_method(instance)
 
     @pytest.mark.asyncio
     async def test_decorator_without_error_handler(self, mock_logger, mock_config):
         """Test decorator when instance doesn't have error_handler."""
-        
+
         class TestClass:
             pass  # No error_handler attribute
-        
+
         @handle_errors(enable_retry=False, enable_circuit_breaker=False)
         async def test_method(self):
             return "success"
-        
+
         instance = TestClass()
         result = await test_method(instance)
         assert result == "success"
-

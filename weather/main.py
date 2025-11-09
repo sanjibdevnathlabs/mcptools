@@ -16,11 +16,7 @@ logger = setup_logging(config, "weather", transport_mode=config.server.transport
 
 # Create FastMCP server using configuration
 # Pass host/port explicitly so FastMCP doesn't use defaults
-mcp = FastMCP(
-    config.app.name,
-    host=config.server.host,
-    port=config.server.port
-)
+mcp = FastMCP(config.app.name, host=config.server.host, port=config.server.port)
 
 
 async def make_openweather_request(
@@ -248,7 +244,7 @@ def main():
         f"Starting weather MCP server: transport={config.server.transport_mode}, "
         f"host={config.server.host}, port={config.server.port}"
     )
-    
+
     # Run server with configured transport (FastMCP reads host/port from environment variables)
     mcp.run(transport=config.server.transport_mode)
 

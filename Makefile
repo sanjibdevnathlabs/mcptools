@@ -166,19 +166,21 @@ test:
 # Server-specific tests (for fast iteration during development)
 test-calc:
 	@echo "🧮 Testing calculator only (with coverage and parallelization)..."
-	pytest calculator/tests/ tests/test_e2e_calculator.py -v -n auto \
+	pytest calculator/tests/ tests/calculator/ -v -n auto \
 		--cov=calculator --cov-report=term-missing
 	@find . -type f -name ".coverage.*" -delete 2>/dev/null || true
 
 test-weather:
 	@echo "🌤️  Testing weather only (with coverage and parallelization)..."
-	APP_ENV=test pytest weather/tests/ tests/test_e2e_weather.py -v -n auto \
+	APP_ENV=test pytest weather/tests/ tests/weather/ -v -n auto \
 		--cov=weather --cov-report=term-missing
 	@find . -type f -name ".coverage.*" -delete 2>/dev/null || true
 
 test-db:
 	@echo "🗄️  Testing database only (with coverage and parallelization)..."
-	APP_ENV=test pytest database/tests/ tests/test_e2e_database.py -v -n auto \
+	@echo "🔧 Setting up test database..."
+	@mysql -h 127.0.0.1 -uroot -proot < database/tests/fixtures/init_test_db.sql 2>&1 | grep -v "Warning" || true
+	APP_ENV=test pytest database/tests/ tests/database/ -v -n auto \
 		--cov=database --cov-report=term-missing
 	@find . -type f -name ".coverage.*" -delete 2>/dev/null || true
 
@@ -306,6 +308,30 @@ docker-compose-down-weather:
 	@echo "🛑 Stopping weather services..."
 	cd weather/deployment/local && docker-compose down
 	@echo "✅ Weather services stopped!"
+
+# Docker test commands - Run quality checks and tests in Docker containers
+docker-test-calculator:
+	@echo "🧪 Running calculator tests in Docker..."
+	cd calculator/deployment/local && docker-compose run --rm calculator-test
+	@echo "✅ Calculator tests completed!"
+
+docker-test-database:
+	@echo "🧪 Running database tests in Docker (requires MySQL)..."
+	cd database/deployment/local && docker-compose up -d mysql
+	@echo "⏳ Waiting for MySQL to be ready..."
+	@sleep 5
+	@echo "🔧 Initializing test database in Docker..."
+	docker exec mysql-mcp mysql -uroot -ptestpassword < database/tests/fixtures/init_test_db.sql 2>&1 | grep -v "Warning" || true
+	cd database/deployment/local && docker-compose run --rm database-test
+	@echo "✅ Database tests completed!"
+
+docker-test-weather:
+	@echo "🧪 Running weather tests in Docker..."
+	cd weather/deployment/local && docker-compose run --rm weather-test
+	@echo "✅ Weather tests completed!"
+
+docker-test-all: docker-test-calculator docker-test-database docker-test-weather
+	@echo "✅ All Docker tests completed!"
 
 docker-compose-down-all:
 	@echo "🛑 Stopping all Docker Compose services..."

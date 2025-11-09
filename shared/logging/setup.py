@@ -8,7 +8,7 @@ import json
 import logging
 import sys
 from datetime import datetime
-from typing import Any
+from typing import Any, Optional, Union
 
 
 class JSONFormatter(logging.Formatter):
@@ -17,10 +17,10 @@ class JSONFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         """
         Format log record as JSON.
-        
+
         Args:
             record: Log record to format
-            
+
         Returns:
             JSON-formatted log string
         """
@@ -47,23 +47,25 @@ class TextFormatter(logging.Formatter):
         super().__init__(format_string, datefmt="%Y-%m-%d %H:%M:%S")
 
 
-def setup_logging(config: Any, logger_name: str, transport_mode: str = None) -> logging.Logger:
+def setup_logging(
+    config: Any, logger_name: str, transport_mode: Optional[str] = None
+) -> logging.Logger:
     """
     Setup logging based on configuration.
-    
+
     Args:
         config: Application configuration object with logger.* attributes
         logger_name: Name for the logger (e.g., "calculator", "database")
         transport_mode: Transport mode ("stdio", "sse", "streamable-http")
                        If "stdio", logging will be forced to file to avoid conflicts
-        
+
     Returns:
         Configured logger instance
-        
+
     Example:
         from shared.logging import setup_logging
         from myapp.config import Config
-        
+
         config = Config()
         logger = setup_logging(config, "myapp", transport_mode="stdio")
         logger.info("Application started")
@@ -80,10 +82,9 @@ def setup_logging(config: Any, logger_name: str, transport_mode: str = None) -> 
     root_logger.setLevel(log_level)
 
     # Create formatter
-    if config.logger.format == "json":
-        formatter = JSONFormatter()
-    else:
-        formatter = TextFormatter()
+    formatter: Union[JSONFormatter, TextFormatter] = (
+        JSONFormatter() if config.logger.format == "json" else TextFormatter()
+    )
 
     # CRITICAL: If stdio transport, force file logging to avoid protocol conflicts
     log_destination = config.logger.destination
@@ -113,12 +114,11 @@ def setup_logging(config: Any, logger_name: str, transport_mode: str = None) -> 
 
     if log_destination in ("file", "both"):
         # Create log directory if it doesn't exist
-        import os
         from pathlib import Path
-        
+
         log_file = Path(config.logger.file_path)
         log_file.parent.mkdir(parents=True, exist_ok=True)
-        
+
         file_handler = logging.FileHandler(str(log_file))
         file_handler.setFormatter(formatter)
         file_handler.setLevel(log_level)
@@ -132,9 +132,8 @@ def setup_logging(config: Any, logger_name: str, transport_mode: str = None) -> 
     logger.info(
         f"Logging configured: level={config.logger.level}, "
         f"format={config.logger.format}, "
-        f"destination={log_destination}" +
-        (f", file={config.logger.file_path}" if "file" in log_destination else "")
+        f"destination={log_destination}"
+        + (f", file={config.logger.file_path}" if "file" in log_destination else "")
     )
 
     return logger
-

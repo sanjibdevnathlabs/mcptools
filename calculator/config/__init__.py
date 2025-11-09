@@ -6,16 +6,15 @@ Uses shared configuration loader with calculator-specific config classes.
 
 from pathlib import Path
 
-from shared.config import ConfigLoader, LoggerConfig
-
 from calculator.config.app import AppConfig
 from calculator.config.server import ServerConfig
+from shared.config import ConfigLoader, LoggerConfig
 
 
 class Config:
     """
     Singleton config loaded from TOML files.
-    
+
     Uses shared ConfigLoader for loading and interpolation,
     with calculator-specific config classes.
     """
@@ -41,7 +40,7 @@ class Config:
 
         # Get config directory
         config_dir = Path(__file__).parent.parent / "environment"
-        
+
         # Load configuration using shared loader
         loader = ConfigLoader(config_dir)
         settings = loader.load()

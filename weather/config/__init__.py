@@ -8,7 +8,6 @@ import os
 from pathlib import Path
 
 from shared.config import ConfigLoader, LoggerConfig
-
 from weather.config.api import APIConfig
 from weather.config.app import AppConfig
 from weather.config.server import ServerConfig
@@ -17,7 +16,7 @@ from weather.config.server import ServerConfig
 class Config:
     """
     Singleton config loaded from TOML files.
-    
+
     Uses shared ConfigLoader for loading and interpolation,
     with weather-specific config classes.
     """
@@ -45,7 +44,7 @@ class Config:
 
         # Get config directory
         config_dir = Path(__file__).parent.parent / "environment"
-        
+
         # Load configuration using shared loader
         loader = ConfigLoader(config_dir)
         settings = loader.load()

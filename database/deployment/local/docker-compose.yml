@@ -4,14 +4,14 @@ services:
     container_name: mysql-mcp
     environment:
       - MYSQL_ROOT_PASSWORD=testpassword
-      - MYSQL_DATABASE=mcp_db
+      - MYSQL_DATABASE=test_db
       - MYSQL_USER=mcp_user
       - MYSQL_PASSWORD=mcp_password
     ports:
       - "3306:3306"
     volumes:
       - mysql-data:/var/lib/mysql
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ../../tests/fixtures/init_test_db.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-ptestpassword"]
       interval: 5s
@@ -38,7 +38,7 @@ services:
       - DB_PORT=3306
       - DB_USER=root
       - DB_PASSWORD=testpassword
-      - DB_DATABASE=mcp_db
+      - DB_DATABASE=test_db
     ports:
       - "8086:8086"
     depends_on:
@@ -70,7 +70,7 @@ services:
       - DB_PORT=3306
       - DB_USER=root
       - DB_PASSWORD=testpassword
-      - DB_DATABASE=mcp_db
+      - DB_DATABASE=test_db
     ports:
       - "8087:8087"
     depends_on:
@@ -84,6 +84,38 @@ services:
       start_period: 10s
     networks:
       - mcp-network
+
+  # Test service - Run quality checks and tests
+  # Runs automatically with docker-compose up (exit code indicates success/failure)
+  # Can also run explicitly: docker-compose run --rm database-test
+  database-test:
+    build:
+      context: ../../..
+      dockerfile: database/docker/Dockerfile.test
+      args:
+        BASE_TAG: local-dev
+    image: mcp-database:test
+    container_name: database-test
+    environment:
+      - APP_ENV=test
+      - LOG_LEVEL=ERROR
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_USER=root
+      - DB_PASSWORD=testpassword
+      - DB_DATABASE=test_db
+    volumes:
+      # Mount source for testing local changes
+      - ../../../database:/app/database:ro
+      - ../../../shared:/app/shared:ro
+      - ../../../tests:/app/tests:ro
+    working_dir: /app
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - mcp-network
+    restart: "no"  # Don't restart after tests complete
 
 volumes:
   mysql-data:

@@ -30,11 +30,16 @@ mcptools/
 │   ├── deployment/    # Docker Compose for local dev
 │   ├── tests/         # Unit and integration tests
 │   └── main.py       # Entry point
-├── shared/             # Shared utilities
-│   ├── config/        # Common config loader
-│   ├── logging/       # Common logging setup
-│   └── docker/        # Base Docker image
-├── tests/              # E2E tests across all MCPs
+├── shared/             # Shared utilities (common across all MCPs)
+│   ├── config/        # Config loading logic & LoggerConfig
+│   ├── logging/       # Logging setup, formatters, and stdio handling
+│   └── docker/        # Base Docker image (mcp-base)
+├── tests/              # E2E tests organized by MCP
+│   ├── calculator/    # Calculator E2E tests
+│   ├── database/      # Database E2E tests
+│   ├── weather/       # Weather E2E tests
+│   ├── conftest.py    # Shared pytest configuration
+│   └── __init__.py    # Makes tests a package
 └── requirements.txt    # Shared dependencies
 ```
 
@@ -159,18 +164,23 @@ make test              # Run all project tests
 
 ### Quick Start with Docker (Recommended)
 
-Each MCP has its own Docker setup for local development:
+Each MCP has its own Docker setup for local development with **automatic test execution**:
 
 ```bash
-# Build all images
-make docker-build-all
+# Build base image (required first time)
+make docker-build-base
 
 # Run specific MCP with docker-compose
+# Each command automatically:
+#  1. Builds the MCP image(s)
+#  2. Runs quality checks (black, ruff, mypy)
+#  3. Executes all tests (unit + integration + E2E)
+#  4. Starts service containers (SSE + HTTP transports)
 make docker-compose-up-calculator   # Calculator on ports 8080 (SSE) + 8081 (HTTP)
 make docker-compose-up-weather      # Weather on ports 8082 (SSE) + 8083 (HTTP)
 make docker-compose-up-database     # Database on ports 8086 (SSE) + 8087 (HTTP) + MySQL 3306
 
-# View logs
+# View logs (including test results)
 make logs-calculator
 make logs-weather
 make logs-database
@@ -179,7 +189,18 @@ make logs-database
 make docker-compose-down-calculator
 make docker-compose-down-weather
 make docker-compose-down-database
+
+# Check test results
+docker ps -a --filter "name=calculator-test"   # Exit code 0 = success ✅
+docker ps -a --filter "name=weather-test"      # Exit code 0 = success ✅
+docker ps -a --filter "name=database-test"     # Exit code 0 = success ✅
 ```
+
+**Test Containers:** Each MCP includes a test service that:
+- Runs automatically with `docker-compose up`
+- Executes quality checks + all tests
+- Exits with status code (0 = pass, non-zero = fail)
+- Provides immediate feedback on code quality
 
 **Per-MCP Documentation:**
 - 📖 [Calculator Docker Guide](calculator/docker/README.md) - Build & configuration details
@@ -325,20 +346,26 @@ print(config.mcp.allowed_query_types)
 
 ### Test Suite Overview
 
-The project includes comprehensive testing:
+The project includes comprehensive testing with **354 total tests passing**:
 
 **Calculator MCP: ✅ Production-Ready (96% coverage)**
-- 112 tests (unit + integration + E2E)
+- **112 tests** (unit + integration + E2E)
 - E2E tests for all 3 protocols (STDIO, SSE, Streamable-HTTP)
 - Validated across all transport modes
+- ✅ All tests passing
 
-**Weather MCP: 🚧 In Progress**
-- Unit tests planned
-- E2E tests planned
+**Weather MCP: ✅ Production-Ready**
+- **51 tests** (unit + integration + E2E)
+- E2E tests for all 3 protocols (STDIO, SSE, Streamable-HTTP)
+- Comprehensive integration testing
+- ✅ All tests passing
 
-**Database MCP: 🚧 In Progress**
-- Unit tests planned
-- E2E tests planned
+**Database MCP: ✅ Production-Ready**
+- **191 tests** (unit + integration + E2E)
+- E2E tests for all 3 protocols (STDIO, SSE, Streamable-HTTP)
+- Full MySQL integration testing
+- Security and monitoring coverage
+- ✅ All tests passing
 
 ### Running Tests
 
@@ -350,14 +377,41 @@ pip install -r requirements-test.txt
 make test
 
 # Run server-specific tests (fast iteration)
-make test-calc          # Calculator only
-make test-weather       # Weather only (when implemented)
-make test-db            # Database only (when implemented)
+make test-calc          # Calculator only (112 tests)
+make test-weather       # Weather only (51 tests)
+make test-db            # Database only (191 tests)
 
 # Run code quality checks
-make check              # Format + lint + type-check
+make check              # Format + lint + type-check (black, ruff, mypy)
 make fix                # Auto-fix all issues
 ```
+
+### Docker-Based Testing
+
+All MCPs include **automatic test execution** in Docker containers:
+
+```bash
+# Tests run automatically with docker-compose up
+make docker-compose-up-calculator   # Builds, runs, and tests calculator
+make docker-compose-up-weather      # Builds, runs, and tests weather
+make docker-compose-up-database     # Builds, runs, and tests database
+
+# Or run tests explicitly in Docker
+make docker-test-calculator   # Run quality checks + tests in Docker
+make docker-test-weather      # Run quality checks + tests in Docker
+make docker-test-database     # Run quality checks + tests in Docker
+make docker-test-all          # Run all Docker tests
+
+# Test containers exit with proper status codes:
+# - Exit 0: All tests passed ✅
+# - Non-zero: Tests failed ❌
+```
+
+**What's Tested in Docker:**
+- ✅ Code quality (black, ruff, mypy)
+- ✅ Unit tests with coverage
+- ✅ Integration tests
+- ✅ E2E tests for all transport protocols
 
 ### Makefile Commands
 
@@ -371,11 +425,17 @@ make check              # Run all quality checks
 make fix                # Auto-fix code issues
 make clean              # Clean build artifacts
 
-# Testing
-make test               # Run all tests with coverage
-make test-calc          # Test calculator (fast)
-make test-weather       # Test weather (fast)
-make test-db            # Test database (fast)
+# Testing (Local)
+make test               # Run all tests with coverage (354 tests)
+make test-calc          # Test calculator only (112 tests, fast)
+make test-weather       # Test weather only (51 tests, fast)
+make test-db            # Test database only (191 tests, fast)
+
+# Testing (Docker)
+make docker-test-calculator # Run quality checks + tests in Docker
+make docker-test-weather    # Run quality checks + tests in Docker
+make docker-test-database   # Run quality checks + tests in Docker
+make docker-test-all        # Run all Docker tests
 
 # Running Locally (Python)
 make run-calculator     # Run calculator server

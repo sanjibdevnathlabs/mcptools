@@ -1,4 +1,5 @@
 """Unit tests for DatabaseSecurityManager"""
+
 import os
 
 # Set test environment before imports
@@ -49,7 +50,9 @@ class TestDatabaseSecurityUnit:
 
     def test_validate_query_explain_is_safe(self, security_manager):
         """Test that EXPLAIN is considered safe"""
-        result = security_manager.validate_query_security("EXPLAIN SELECT id FROM users")
+        result = security_manager.validate_query_security(
+            "EXPLAIN SELECT id FROM users"
+        )
         # EXPLAIN with simple query should be safe
         assert "safe" in result
         assert "risk_level" in result
@@ -57,8 +60,7 @@ class TestDatabaseSecurityUnit:
     def test_validate_query_with_client_id(self, security_manager):
         """Test that client_id is included in result"""
         result = security_manager.validate_query_security(
-            "SHOW TABLES",
-            client_id="test_client_123"
+            "SHOW TABLES", client_id="test_client_123"
         )
         assert result["client_id"] == "test_client_123"
 
@@ -81,9 +83,7 @@ class TestDatabaseSecurityUnit:
 
     def test_validate_connection_security(self, security_manager):
         """Test connection security validation"""
-        result = security_manager.validate_connection_security(
-            client_id="test_client"
-        )
+        result = security_manager.validate_connection_security(client_id="test_client")
         assert isinstance(result, dict)
         # Should have validation results
         assert "allowed" in result or "rate_limit_exceeded" in result
@@ -91,18 +91,13 @@ class TestDatabaseSecurityUnit:
     def test_record_authentication_success(self, security_manager):
         """Test recording successful authentication"""
         # Should not raise error
-        security_manager.record_authentication_event(
-            "test_client",
-            success=True
-        )
+        security_manager.record_authentication_event("test_client", success=True)
 
     def test_record_authentication_failure(self, security_manager):
         """Test recording failed authentication"""
         # Should not raise error
         security_manager.record_authentication_event(
-            "test_client",
-            success=False,
-            reason="Invalid credentials"
+            "test_client", success=False, reason="Invalid credentials"
         )
 
     def test_validate_query_with_sql_injection(self, security_manager):
@@ -114,7 +109,7 @@ class TestDatabaseSecurityUnit:
             "SELECT * FROM users; DROP TABLE users;",
             "SELECT * FROM users WHERE id = 1 UNION SELECT * FROM passwords",
         ]
-        
+
         for query in injection_queries:
             result = security_manager.validate_query_security(query)
             # Should detect threats
@@ -148,7 +143,7 @@ class TestDatabaseSecurityUnit:
         """Test validation with query parameters"""
         query = "SELECT * FROM users WHERE id = %s AND status = %s"
         params = [1, "active"]
-        
+
         result = security_manager.validate_query_security(query, params=params)
         assert "safe" in result
         assert "risk_level" in result
@@ -162,7 +157,7 @@ class TestDatabaseSecurityUnit:
             ["admin'--"],
             ["1; DROP TABLE users"],
         ]
-        
+
         for params in suspicious_params:
             result = security_manager.validate_query_security(query, params=params)
             assert "safe" in result
@@ -182,7 +177,7 @@ class TestDatabaseSecurityUnit:
             "SELECT * FROM users WHERE id = 1 /* comment */",
             "SELECT * FROM users WHERE id = 1 #comment",
         ]
-        
+
         for query in queries:
             result = security_manager.validate_query_security(query)
             assert "safe" in result
@@ -214,7 +209,7 @@ class TestDatabaseSecurityUnit:
             "SELECT INTO OUTFILE '/tmp/dump.txt' FROM users",
             "CALL SYSTEM('ls -la')",
         ]
-        
+
         for query in queries:
             result = security_manager.validate_query_security(query)
             assert "safe" in result
@@ -227,7 +222,7 @@ class TestDatabaseSecurityUnit:
         # Test with empty query
         result = security_manager.validate_query_security("")
         assert "safe" in result
-        
+
         # Test with None (should handle gracefully)
         result = security_manager.validate_query_security(None)
         assert "safe" in result
@@ -238,7 +233,7 @@ class TestDatabaseSecurityUnit:
             "SELECT * FROM users WHERE id = 1 AND SLEEP(5)",
             "SELECT * FROM users WHERE id = 1 AND BENCHMARK(1000000,MD5('test'))",
         ]
-        
+
         for query in queries:
             result = security_manager.validate_query_security(query)
             assert "safe" in result
@@ -252,7 +247,7 @@ class TestDatabaseSecurityUnit:
             "SELECT * FROM users",
             "  SELECT  *  FROM  users  ",
         ]
-        
+
         results = [security_manager.validate_query_security(q) for q in queries]
         # All should have same query type
         for result in results:
@@ -264,7 +259,7 @@ class TestDatabaseSecurityUnit:
             "SELECT * FROM users WHERE name = CHAR(97,100,109,105,110)",
             "SELECT * FROM users WHERE id = 0x61646D696E",
         ]
-        
+
         for query in queries:
             result = security_manager.validate_query_security(query)
             assert "safe" in result

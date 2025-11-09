@@ -1,4 +1,5 @@
 """Unit tests for database configuration"""
+
 import pytest
 
 from database.config import Config
@@ -30,7 +31,9 @@ class TestDatabaseConfig:
     def test_app_name(self):
         """Test application name is set correctly"""
         config = Config()
-        assert config.app.name == "database-mcp", f"Expected 'database-mcp', got '{config.app.name}'"
+        assert (
+            config.app.name == "database-mcp"
+        ), f"Expected 'database-mcp', got '{config.app.name}'"
 
     def test_database_config_attributes(self):
         """Test database configuration has required attributes"""
@@ -48,7 +51,7 @@ class TestDatabaseConfig:
         assert hasattr(config.server, "transport_mode")
         assert hasattr(config.server, "host")
         assert hasattr(config.server, "port")
-        
+
         # Logger config is now separate
         assert hasattr(config.logger, "level")
         assert hasattr(config.logger, "format")
@@ -97,4 +100,3 @@ class TestDatabaseConfig:
         """Test that max rows returned is an integer"""
         config = Config()
         assert isinstance(config.security.max_rows_returned, int)
-

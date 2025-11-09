@@ -1,4 +1,5 @@
 """Integration tests for database MCP with real MySQL"""
+
 import os
 
 # Set test environment before imports
@@ -56,14 +57,14 @@ class TestDatabaseIntegration:
         manager = DatabaseManager()
         # Pool should not be initialized yet
         assert manager.pool is None
-        
+
         # Execute a query - should automatically initialize pool
         result = await manager.execute_query("SELECT 1 as value")
-        
+
         # Pool should now be initialized
         assert manager.pool is not None
         assert result["success"] is True
-        
+
         # Clean up
         await manager.close_pool()
 
@@ -129,7 +130,7 @@ class TestDatabaseIntegration:
         assert result["success"] is True
         data = result["data"]
         assert len(data) >= 3  # We inserted 3 users
-        
+
         # Verify data structure
         assert "id" in data[0]
         assert "name" in data[0]
@@ -168,7 +169,7 @@ class TestDatabaseIntegration:
         assert result["success"] is True
         data = result["data"]
         assert len(data) > 0
-        
+
         # Should include our columns
         fields = [row["Field"] for row in data]
         assert "id" in fields
@@ -220,7 +221,7 @@ class TestDatabaseIntegration:
         result1 = await db_manager.execute_query("SELECT 1 as value")
         assert result1 is not None
         assert result1["success"] is True
-        
+
         # Execute another query (should reuse connection from pool)
         result2 = await db_manager.execute_query("SELECT 2 as value")
         assert result2 is not None
@@ -312,7 +313,7 @@ class TestDatabaseIntegration:
         assert hasattr(snapshot, "databases")
         assert len(snapshot.databases) > 0
         assert "test_mcp_db" in snapshot.databases
-        
+
         # Check tables in snapshot
         assert hasattr(snapshot, "tables")
         assert len(snapshot.tables) > 0
@@ -330,7 +331,7 @@ class TestDatabaseIntegration:
 
         assert analysis is not None
         assert isinstance(analysis, dict)
-        
+
         # Check that analysis contains expected keys
         # (exact structure depends on SchemaAnalyzer implementation)
         assert "summary" in analysis or "databases" in analysis or len(analysis) > 0
@@ -350,11 +351,11 @@ class TestDatabaseIntegration:
 
         assert comparison is not None
         assert isinstance(comparison, dict)
-        
+
         # Check that comparison result is a dict
         # (exact structure depends on SchemaComparator implementation)
         assert len(comparison) > 0
-        
+
         # If changes_detected key exists, it should be False when comparing with itself
         if "changes_detected" in comparison:
             assert comparison["changes_detected"] is False
@@ -362,20 +363,23 @@ class TestDatabaseIntegration:
     @pytest.mark.asyncio
     async def test_schema_manager_export_json(self, db_manager):
         """Test SchemaManager.export_schema_snapshot() with JSON format"""
-        from database.src.schema_manager import SchemaManager
         import json
 
+        from database.src.schema_manager import SchemaManager
+
         schema_manager = SchemaManager(db_manager)
-        
+
         # Create snapshot
         snapshot = await schema_manager.create_schema_snapshot(["test_mcp_db"])
-        
+
         # Export as JSON
-        json_export = schema_manager.export_schema_snapshot(snapshot, format_type="json")
-        
+        json_export = schema_manager.export_schema_snapshot(
+            snapshot, format_type="json"
+        )
+
         assert json_export is not None
         assert isinstance(json_export, str)
-        
+
         # Verify it's valid JSON
         parsed = json.loads(json_export)
         assert "schema_snapshot" in parsed
@@ -389,16 +393,16 @@ class TestDatabaseIntegration:
         from database.src.schema_manager import SchemaManager
 
         schema_manager = SchemaManager(db_manager)
-        
+
         # Create snapshot
         snapshot = await schema_manager.create_schema_snapshot(["test_mcp_db"])
-        
+
         # Export as SQL
         sql_export = schema_manager.export_schema_snapshot(snapshot, format_type="sql")
-        
+
         assert sql_export is not None
         assert isinstance(sql_export, str)
-        
+
         # Verify it contains SQL DDL statements
         assert "CREATE DATABASE" in sql_export or "CREATE TABLE" in sql_export
         assert "test_mcp_db" in sql_export
@@ -409,13 +413,13 @@ class TestDatabaseIntegration:
         from database.src.schema_manager import SchemaManager
 
         schema_manager = SchemaManager(db_manager)
-        
+
         # Create snapshot
         snapshot = await schema_manager.create_schema_snapshot(["test_mcp_db"])
-        
+
         # Export with default format (should be JSON)
         default_export = schema_manager.export_schema_snapshot(snapshot)
-        
+
         assert default_export is not None
         assert isinstance(default_export, str)
 
@@ -423,9 +427,10 @@ class TestDatabaseIntegration:
     async def test_execute_query_with_max_rows(self, db_manager):
         """Test execute_query with max_rows limit"""
         import time
+
         # Use unique suffix to avoid duplicate key errors
         suffix = int(time.time() * 1000)
-        
+
         # First, insert multiple rows
         await db_manager.execute_query(
             f"INSERT INTO users (name, email, status) VALUES "
@@ -433,13 +438,12 @@ class TestDatabaseIntegration:
             f"('User2', 'user2_{suffix}@test.com', 'active'), "
             f"('User3', 'user3_{suffix}@test.com', 'active')"
         )
-        
+
         # Query with max_rows limit of 2
         result = await db_manager.execute_query(
-            "SELECT * FROM users WHERE status = 'active'",
-            max_rows=2
+            "SELECT * FROM users WHERE status = 'active'", max_rows=2
         )
-        
+
         assert result["success"] is True
         assert len(result["data"]) <= 2
 
@@ -447,21 +451,21 @@ class TestDatabaseIntegration:
     async def test_execute_query_with_params(self, db_manager):
         """Test execute_query with parameterized query"""
         import time
+
         # Use unique email to avoid duplicate key errors
         unique_email = f"param{int(time.time() * 1000)}@test.com"
-        
+
         # Insert test data
         await db_manager.execute_query(
             f"INSERT INTO users (name, email, status) VALUES "
             f"('ParamUser', '{unique_email}', 'active')"
         )
-        
+
         # Query with parameters
         result = await db_manager.execute_query(
-            "SELECT * FROM users WHERE status = %s",
-            params=["active"]
+            "SELECT * FROM users WHERE status = %s", params=["active"]
         )
-        
+
         assert result["success"] is True
         assert len(result["data"]) > 0
 
@@ -469,13 +473,14 @@ class TestDatabaseIntegration:
     async def test_execute_query_fetch_results_false(self, db_manager):
         """Test execute_query with fetch_results=False"""
         import time
+
         # Use unique email to avoid duplicate key errors
         unique_email = f"nofetch{int(time.time() * 1000)}@test.com"
         result = await db_manager.execute_query(
             f"INSERT INTO users (name, email, status) VALUES ('NoFetch', '{unique_email}', 'active')",
-            fetch_results=False
+            fetch_results=False,
         )
-        
+
         assert result["success"] is True
         # Should have affected_rows instead of data
         assert "affected_rows" in result or "data" in result
@@ -484,19 +489,20 @@ class TestDatabaseIntegration:
     async def test_execute_query_update_operation(self, db_manager):
         """Test execute_query with UPDATE operation"""
         import time
+
         # Use unique email to avoid duplicate key errors
         unique_email = f"update{int(time.time() * 1000)}@test.com"
-        
+
         # First insert a user
         await db_manager.execute_query(
             f"INSERT INTO users (name, email, status) VALUES ('UpdateMe', '{unique_email}', 'pending')"
         )
-        
+
         # Update the user
         result = await db_manager.execute_query(
             f"UPDATE users SET status = 'active' WHERE email = '{unique_email}'"
         )
-        
+
         assert result["success"] is True
         assert "affected_rows" in result or result.get("data") == []
 
@@ -504,19 +510,19 @@ class TestDatabaseIntegration:
     async def test_execute_query_delete_operation(self, db_manager):
         """Test execute_query with DELETE operation"""
         import time
+
         # Use unique email to avoid duplicate key errors
         unique_email = f"delete{int(time.time() * 1000)}@test.com"
-        
+
         # First insert a user
         await db_manager.execute_query(
             f"INSERT INTO users (name, email, status) VALUES ('DeleteMe', '{unique_email}', 'active')"
         )
-        
+
         # Delete the user
         result = await db_manager.execute_query(
             f"DELETE FROM users WHERE email = '{unique_email}'"
         )
-        
+
         assert result["success"] is True
         assert "affected_rows" in result or result.get("data") == []
-
