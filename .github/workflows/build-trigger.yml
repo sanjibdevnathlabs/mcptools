@@ -21,6 +21,9 @@ jobs:
       github.event.issue.pull_request &&
       contains(github.event.comment.body, '/build')
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      issues: write
     
     steps:
       - name: Check if commenter has write access
@@ -87,6 +90,9 @@ jobs:
       github.event.action == 'labeled' &&
       github.event.label.name == 'force-build'
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      issues: write
     
     steps:
       - name: Comment on PR
