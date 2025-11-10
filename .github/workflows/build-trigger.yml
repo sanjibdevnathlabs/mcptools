@@ -1,0 +1,121 @@
+name: 🚀 Build Trigger (Manual Override)
+
+# This workflow allows forcing Docker builds via:
+# 1. Adding 'force-build' label to PR
+# 2. Commenting '/build' on PR (auto-adds label)
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request:
+    types: [labeled]
+
+jobs:
+  # ===========================================================================
+  # Parse slash commands from PR comments
+  # ===========================================================================
+  parse-command:
+    name: 🔍 Parse Build Command
+    if: |
+      github.event_name == 'issue_comment' &&
+      github.event.issue.pull_request &&
+      contains(github.event.comment.body, '/build')
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Check if commenter has write access
+        id: check-permission
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: permission } = await github.rest.repos.getCollaboratorPermissionLevel({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              username: context.actor
+            });
+            
+            const hasPermission = ['admin', 'write'].includes(permission.permission);
+            console.log(`User ${context.actor} has ${permission.permission} permission`);
+            return hasPermission;
+      
+      - name: Add force-build label
+        if: steps.check-permission.outputs.result == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              labels: ['force-build']
+            });
+            
+            // Add a reaction to show command was processed
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: context.payload.comment.id,
+              content: 'rocket'
+            });
+      
+      - name: Comment on PR (permission denied)
+        if: steps.check-permission.outputs.result == 'false'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: '❌ You do not have permission to trigger builds. Only maintainers can use `/build` command.'
+            });
+            
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: context.payload.comment.id,
+              content: 'confused'
+            });
+  
+  # ===========================================================================
+  # Notify when force-build label is added
+  # ===========================================================================
+  notify-force-build:
+    name: 🔔 Notify Force Build
+    if: |
+      github.event_name == 'pull_request' &&
+      github.event.action == 'labeled' &&
+      github.event.label.name == 'force-build'
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Comment on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number
+            });
+            
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `🚀 **Force Build Triggered!**
+            
+            Docker builds will run for this PR regardless of file changes.
+            
+            The CI pipeline will:
+            - ✅ Build base image
+            - ✅ Build all MCP production images
+            - ✅ Build all MCP test images
+            - ✅ Run all tests
+            
+            **Triggered by:** @${context.actor}
+            **Commit:** \`${pr.head.sha.substring(0, 7)}\`
+            
+            Remove the \`force-build\` label to revert to automatic build detection.`
+            });
+
